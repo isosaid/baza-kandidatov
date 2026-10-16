@@ -419,9 +419,16 @@ td .mut{color:var(--muted);font-size:12px}
     <div class="grid g2" style="margin-top:16px">
       <div class="field"><label data-i="bxHook">Входящий вебхук</label><input class="inp" id="bxHook" placeholder="https://crm.avesto.tj/rest/1/xxxxxxxxxxxx/">
         <div class="hint" style="margin-top:6px" data-i="bxHookHint">Битрикс24 → Разработчикам → Другое → Входящий вебхук. Права: disk, crm.</div></div>
-      <div class="field"><label data-i="bxFolder">ID папки с резюме</label><input class="inp" id="bxFolder" placeholder="например 1542">
-        <div class="hint" style="margin-top:6px" data-i="bxFolderHint">Откройте папку на Диске — число в адресе. Публичная ссылка вида /folder/xxxx не подходит, нужен числовой ID.</div></div>
+      <div class="field"><label data-i="bxFolder">Папка с резюме</label>
+        <div class="row" style="flex-wrap:nowrap">
+          <input class="inp" id="bxFolder" placeholder="ID папки" style="max-width:150px">
+          <button class="btn btn-line btn-sm" onclick="bxBrowse()" style="white-space:nowrap"><span data-i="bxPickBtn">Выбрать на Диске</span></button>
+        </div>
+        <div class="hint" style="margin-top:6px" data-i="bxFolderHint">Нажмите «Выбрать на Диске» и дойдите до нужной папки — ID подставится сам. Публичная ссылка вида /folder/xxxx для этого не годится, у неё нет API.</div></div>
     </div>
+
+    <div id="bxBrowser" hidden style="margin-top:16px"></div>
+
     <div class="row" style="margin-top:16px">
       <button class="btn btn-line" onclick="bxTest()"><span data-i="bxTest">Проверить связь</span></button>
       <button class="btn btn-primary" onclick="bxSync()"><span data-i="bxSync">Синхронизировать папку</span></button>
@@ -548,7 +555,9 @@ ru:{appName:'База кандидатов',appOrg:'ООО «Авесто Гру
  ocrNote:'У этих файлов нет текстового слоя — это сканы или фотографии, текст из них машинно не читается. Откройте карточку и заполните поля вручную либо попросите кандидата прислать резюме файлом Word или PDF с текстом.',
  bxH:'Битрикс24',bxP:'Подключение к Диску портала и синхронизация папки с резюме.',
  bxHook:'Входящий вебхук',bxHookHint:'Битрикс24 → Разработчикам → Другое → Входящий вебхук. Права: disk, crm.',
- bxFolder:'ID папки с резюме',bxFolderHint:'Откройте папку на Диске — число в адресе. Публичная ссылка вида /folder/xxxx не подходит, нужен числовой ID.',
+ bxFolder:'Папка с резюме',bxFolderHint:'Нажмите «Выбрать на Диске» и дойдите до нужной папки — ID подставится сам. Публичная ссылка вида /folder/xxxx для этого не годится, у неё нет API.',
+ bxPickBtn:'Выбрать на Диске',bxLoading:'читаю Диск…',bxStorages:'Хранилища',bxMyDisk:'Мой Диск',bxCommon:'Общий диск',
+ bxNoSub:'Вложенных папок нет',bxFilesHere:'Резюме прямо в этой папке',bxPickThis:'Выбрать эту папку',bxPicked:'Выбрана папка',
  bxTest:'Проверить связь',bxSync:'Синхронизировать папку',bxDeepLbl:'включая вложенные папки',
  bxHowTitle:'Как разместить платформу внутри портала',
  setH:'Настройки',setP:'Веса критериев, словарь навыков и управление данными.',
@@ -610,7 +619,9 @@ tj:{appName:'Пойгоҳи номзадҳо',appOrg:'ҶДММ «Авесто Г
  ocrNote:'Ин файлҳо қабати матнӣ надоранд — скан ё акс мебошанд, матн аз онҳо мошинӣ хонда намешавад. Варақаро кушоед ва майдонҳоро дастӣ пур кунед ё аз номзад резюмеи Word ё PDF-и матнӣ хоҳиш кунед.',
  bxH:'Битрикс24',bxP:'Пайвастшавӣ ба Диски портал ва ҳамоҳангсозии ҷузвдони резюме.',
  bxHook:'Вебхуки воридотӣ',bxHookHint:'Битрикс24 → Ба таҳиягарон → Дигар → Вебхуки воридотӣ. Ҳуқуқҳо: disk, crm.',
- bxFolder:'ID-и ҷузвдони резюме',bxFolderHint:'Ҷузвдонро дар Диск кушоед — рақам дар суроға. Истиноди оммавии /folder/xxxx мувофиқ нест, ID-и рақамӣ лозим аст.',
+ bxFolder:'Ҷузвдони резюме',bxFolderHint:'«Дар Диск интихоб кардан»-ро пахш кунед ва то ҷузвдони лозимӣ равед — ID худаш гузошта мешавад. Истиноди оммавии /folder/xxxx барои ин мувофиқ нест, API надорад.',
+ bxPickBtn:'Дар Диск интихоб кардан',bxLoading:'Диск хонда мешавад…',bxStorages:'Анборҳо',bxMyDisk:'Диски ман',bxCommon:'Диски умумӣ',
+ bxNoSub:'Ҷузвдони дохилӣ нест',bxFilesHere:'Резюме дар худи ҳамин ҷузвдон',bxPickThis:'Ҳамин ҷузвдонро интихоб кардан',bxPicked:'Ҷузвдони интихобшуда',
  bxTest:'Санҷиши пайваст',bxSync:'Ҳамоҳангсозии ҷузвдон',bxDeepLbl:'бо ҷузвдонҳои дохилӣ',
  bxHowTitle:'Чӣ тавр платформаро дар дохили портал ҷойгир кардан',
  setH:'Танзимот',setP:'Вазни меъёрҳо, луғати малакаҳо ва идораи маълумот.',
@@ -1227,7 +1238,7 @@ async function ingestFiles(files){
 function renderScans(){
   const s = DATA.filter(c=>c.scan);
   scanCard.style.display = s.length?'block':'none';
-  scanList.innerHTML = s.map(c=>`<span class="pill warn" style="cursor:pointer" onclick="openD(${JSON.stringify(c.id)})">${esc(c.file)}</span>`).join('');
+  scanList.innerHTML = s.map(c=>`<span class="pill warn" style="cursor:pointer" onclick="openD(${jsArg(c.id)})">${esc(c.file)}</span>`).join('');
 }
 
 /* ============================================================
@@ -1251,7 +1262,7 @@ function fillSelects(){
   fStatus.value=stCur;
   const positions = uniq(DATA.map(c=>c.folder||c.position));
   posChips.innerHTML = [`<span class="chip ${POS_FILTER?'':'selected'}" onclick="setPos('')">${esc(T('anyPos'))}</span>`]
-    .concat(positions.map(p=>`<span class="chip ${POS_FILTER===p?'selected':''}" onclick="setPos(${JSON.stringify(p).replace(/"/g,'&quot;')})">${esc(p)}</span>`)).join('');
+    .concat(positions.map(p=>`<span class="chip ${POS_FILTER===p?'selected':''}" onclick="setPos(${jsArg(p)})">${esc(p)}</span>`)).join('');
 }
 function setPos(p){ POS_FILTER=p; renderBase(); }
 
@@ -1281,7 +1292,7 @@ function renderBase(){
   const H = [['name',T('cName')],['position',T('cPosition')],['exp',T('cExpY')],['city',T('cCityT')],['edu',T('cEduT')],['skills',T('cSkills')],['status',T('cStatus')]];
   tblBase.innerHTML = '<thead><tr>'+H.map(([k,l])=>`<th onclick="sortBy('${k}')">${esc(l)}${SORT.k===k?(SORT.d>0?' ▲':' ▼'):''}</th>`).join('')+'</tr></thead><tbody>'+
    rows.map(c=>{ const st=STATUS[c.status||'new'];
-   return `<tr class="clk" onclick="openD(${JSON.stringify(c.id).replace(/"/g,'&quot;')})">
+   return `<tr class="clk" onclick="openD(${jsArg(c.id)})">
      <td><div class="nm">${esc(c.name||'—')}</div><div class="mut">${esc(c.phone||c.email||c.file)}</div></td>
      <td>${esc(c.position||c.folder||'—')}</td>
      <td>${c.exp!=null?c.exp+' '+esc(T('yrs')):'<span class="mut">—</span>'}</td>
@@ -1377,7 +1388,7 @@ const ICON_WN = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" ari
 function candCard(s,i){
   const c = s.c, cls = s.score>=85?'accent':(s.score>=65?'warn':'danger');
   const role = [c.position||c.folder, c.exp!=null?c.exp+' '+T('yrs'):null, c.city, c.edu?EDU_NAME[c.edu][LANG]:null].filter(Boolean).join(' · ');
-  const jid = JSON.stringify(c.id).replace(/"/g,'&quot;');
+  const jid = jsArg(c.id);
   return `<div class="cand-card">
    <div class="cand-top">
      <div class="dial" data-pct="${s.score}" data-color="${cls}"></div>
@@ -1605,6 +1616,74 @@ async function bxCall(method, params){
   if(j.error) throw new Error(j.error_description||j.error);
   return j.result;
 }
+/* ---------- обозреватель Диска ----------
+   ID папки в интерфейсе Битрикса не показывается, поэтому находим её
+   сами: сначала хранилища (Мой Диск, Общий диск, группы), затем обход
+   папок кликами. Выбранная папка подставляется в поле ID. */
+let BX_CRUMB = [];
+function bxBrowse(){
+  bxBrowser.hidden = false;
+  BX_CRUMB = [];
+  bxBrowser.innerHTML = `<div class="panel" style="padding:16px"><p class="hint">${esc(T('bxLoading'))}</p></div>`;
+  bxCall('disk.storage.getlist',{}).then(list=>{
+    const items = (list||[]).filter(s=>s.ROOT_OBJECT_ID).map(s=>({
+      id:s.ROOT_OBJECT_ID,
+      name:s.NAME || (s.ENTITY_TYPE==='user' ? T('bxMyDisk') : T('bxCommon'))
+    }));
+    bxRender(items, null, 0);
+  }).catch(e=>{
+    bxBrowser.innerHTML = `<div class="note r">${esc(T('bxFail'))} — ${esc(e.message)}<br>${esc(T('bxCors'))}</div>`;
+  });
+}
+async function bxEnter(id, name){
+  BX_CRUMB.push({id,name});
+  await bxShow(id);
+}
+async function bxUp(i){
+  BX_CRUMB = BX_CRUMB.slice(0, i+1);
+  if(!BX_CRUMB.length) return bxBrowse();
+  await bxShow(BX_CRUMB[BX_CRUMB.length-1].id);
+}
+async function bxShow(id){
+  bxBrowser.innerHTML = `<div class="panel" style="padding:16px"><p class="hint">${esc(T('bxLoading'))}</p></div>`;
+  try{
+    const r = await bxCall('disk.folder.getchildren',{id});
+    const items = (r && r.items) || r || [];
+    const folders = items.filter(i=>i.TYPE==='folder').map(i=>({id:i.ID,name:i.NAME}));
+    const files = items.filter(i=>i.TYPE!=='folder' && /\.(pdf|docx|doc|txt|rtf)$/i.test(i.NAME)).length;
+    bxRender(folders, id, files);
+  }catch(e){
+    bxBrowser.innerHTML = `<div class="note r">${esc(e.message)}</div>`;
+  }
+}
+function bxRender(folders, currentId, files){
+  const crumbs = BX_CRUMB.length
+    ? `<button class="btn btn-ghost btn-sm" style="padding:2px 6px" onclick="bxBrowse()">${esc(T('bxStorages'))}</button>`
+      + BX_CRUMB.map((c,i)=>` / <button class="btn btn-ghost btn-sm" style="padding:2px 6px" onclick="bxUp(${i})">${esc(c.name)}</button>`).join('')
+    : `<span class="hint">${esc(T('bxStorages'))}</span>`;
+  const rows = folders.length
+    ? folders.map(f=>`<div class="row" style="padding:8px 0;border-bottom:1px solid #EFEFEB;flex-wrap:nowrap">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true" style="flex:none;color:var(--muted)"><path d="M1.8 4.2c0-.6.5-1.1 1.1-1.1h3l1.3 1.5h6c.6 0 1.1.5 1.1 1.1v6.1c0 .6-.5 1.1-1.1 1.1H2.9c-.6 0-1.1-.5-1.1-1.1V4.2Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+        <button class="btn btn-ghost btn-sm" style="padding:0;color:var(--ink);font-weight:500"
+          onclick="bxEnter(${jsArg(String(f.id))},${jsArg(f.name)})">${esc(f.name)}</button>
+      </div>`).join('')
+    : `<p class="hint" style="padding:8px 0">${esc(T('bxNoSub'))}</p>`;
+  const pick = currentId!==null && currentId!==undefined
+    ? `<div class="row" style="margin-top:14px;justify-content:space-between">
+         <span class="hint">${esc(T('bxFilesHere'))}: <b class="num">${files||0}</b></span>
+         <button class="btn btn-primary btn-sm" onclick="bxPick(${jsArg(String(currentId))})">${esc(T('bxPickThis'))}</button>
+       </div>` : '';
+  bxBrowser.innerHTML = `<div class="panel" style="padding:16px">
+    <div style="font-size:12.5px;margin-bottom:10px">${crumbs}</div>${rows}${pick}</div>`;
+}
+function bxPick(id){
+  bxFolder.value = id;
+  localStorage.setItem('avb_folder', id);
+  const name = BX_CRUMB.length ? BX_CRUMB[BX_CRUMB.length-1].name : id;
+  bxBrowser.innerHTML = `<div class="note">${esc(T('bxPicked'))}: <b>${esc(name)}</b> (ID ${esc(id)})</div>`;
+  toast(T('saved'));
+}
+
 async function bxTest(){
   bxLog.innerHTML=''; try{
     const u = await bxCall('user.current',{});
@@ -1686,6 +1765,9 @@ function saveDict(){ localStorage.setItem('avb_skills', skDict.value); SKILLS=pa
    ОБЩЕЕ
    ============================================================ */
 function esc(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+/* значение как аргумент в inline-обработчике: кавычки обязаны стать сущностями,
+   иначе атрибут onclick рвётся на первой же кавычке */
+const jsArg = v => esc(JSON.stringify(v));
 function toast(m){ const d=document.createElement('div'); d.className='toast'; d.textContent=m;
   document.body.appendChild(d); setTimeout(()=>d.remove(),1800); }
 function crumb(){
