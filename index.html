@@ -2223,13 +2223,24 @@ const fmtDT   = t => t ? new Date(t).toLocaleString(LANG==='tj'?'tg-TJ':'ru-RU',
 
 /* ---------- избранное ---------- */
 function saveFav(){
-  if(!LAST_SHORT.length) return;
-  const def = (cPos.value.trim() || T('shortlist')) + ' · ' + fmtDate(Date.now());
-  const name = prompt(T('favName'), def);
-  if(name===null) return;
-  FAV.unshift({ id:'f'+Date.now(), name:name.trim()||def, date:Date.now(), crit:currentCrit(),
-    items: LAST_SHORT.map(x=>({id:x.c.id, name:x.c.name||x.c.file, score:x.score})) });
-  LSS('avb_fav', FAV); renderFav(); toast(T('saved'));
+  if(!LAST_SHORT.length){ toast(T('posNoShort')); return; }
+  // Название папки = должность из ТЗ (или «Шорт-лист»), без prompt
+  const prof = cPos.value.trim() || T('shortlist');
+  // Если папка с таким названием уже есть — добавляем кандидатов в неё
+  const existing = FAV.find(f => f.name === prof);
+  if(existing){
+    const existIds = new Set(existing.items.map(i=>i.id));
+    LAST_SHORT.forEach(x=>{ if(!existIds.has(x.c.id)) existing.items.push({id:x.c.id, name:x.c.name||x.c.file, score:x.score}); });
+    existing.date = Date.now();
+    LSS('avb_fav', FAV); renderFav();
+    toast('📁 ' + prof + ': ' + T('saved'));
+  } else {
+    FAV.unshift({ id:'f'+Date.now(), name:prof, date:Date.now(), crit:currentCrit(),
+      items: LAST_SHORT.map(x=>({id:x.c.id, name:x.c.name||x.c.file, score:x.score})) });
+    LSS('avb_fav', FAV); renderFav();
+    toast('📁 ' + prof + ': ' + T('saved'));
+  }
+  go('fav');
 }
 function delFav(id){ FAV = FAV.filter(f=>f.id!==id); LSS('avb_fav',FAV); renderFav(); }
 function delHist(i){ HIST.splice(i,1); LSS('avb_hist',HIST); renderFav(); }
@@ -2255,7 +2266,10 @@ function renderFav(){
   const colls = FAV.length ? FAV.map(f=>`
     <div class="panel" style="margin-bottom:14px">
       <div class="row" style="justify-content:space-between;margin-bottom:10px">
-        <h3 style="font-size:15px">${esc(f.name)}</h3>
+        <h3 style="font-size:15px;display:flex;align-items:center;gap:7px">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="color:var(--accent);flex-shrink:0"><path d="M2 4a1 1 0 011-1h3.586a1 1 0 01.707.293L8 4h5a1 1 0 011 1v6a1 1 0 01-1 1H3a1 1 0 01-1-1V4z" fill="currentColor" opacity=".2"/><path d="M2 5h12v6a1 1 0 01-1 1H3a1 1 0 01-1-1V5z" stroke="currentColor" stroke-width="1.3"/><path d="M2 5V4a1 1 0 011-1h3.172a1 1 0 01.707.293L8 4.465" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+          ${esc(f.name)}
+        </h3>
         <div class="row">
           <span class="hint">${esc(fmtDate(f.date))} · ${f.items.length} ${esc(T('cands'))}</span>
           <button class="btn btn-ghost btn-sm" onclick="applyCrit(${jsArg(f.crit)})">${esc(T('repeat'))}</button>
