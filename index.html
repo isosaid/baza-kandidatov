@@ -60,8 +60,10 @@ nav.primary{display:flex;flex-direction:column;gap:2px}
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 40px;border-bottom:1px solid var(--line);background:var(--surface);position:sticky;top:0;z-index:5}
 .crumbs{font-size:12.5px;color:var(--muted)}
 .crumbs b{color:var(--ink);font-weight:600}
-.topstats{display:flex;gap:18px;font-size:12px;color:var(--muted)}
-.topstats b{color:var(--ink);font-family:var(--mono)}
+.user{display:flex;align-items:center;gap:10px}
+.user .avatar{width:32px;height:32px;border-radius:50%;background:var(--ink-soft);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex:none}
+.user .who{font-size:13px;line-height:1.3}
+.user .who .role{display:block;color:var(--muted);font-size:11.5px}
 .screen{display:none;padding:34px 40px 80px;max-width:1200px}
 .screen.active{display:block}
 @media(max-width:1000px){
@@ -73,7 +75,7 @@ nav.primary{display:flex;flex-direction:column;gap:2px}
   .sidebar-spacer,.arch{display:none}
   .lang-sw{margin:0;flex:none}
   .topbar,.screen{padding-left:16px;padding-right:16px}
-  .topstats{display:none}
+  .user .who{display:none}
 }
 
 /* ---------- components ---------- */
@@ -120,6 +122,10 @@ textarea.inp{resize:vertical;min-height:96px;font-size:14.5px;padding:13px 15px;
 @media(max-width:860px){.g2,.g3,.g4{grid-template-columns:1fr}}
 
 .chip-row{display:flex;flex-wrap:wrap;gap:8px}
+.filters-toggle{display:flex;align-items:center;gap:6px;margin-top:18px;font-size:13px;font-weight:600;color:var(--ink-soft);background:none;border:none;padding:0}
+.filters-toggle svg{transition:transform .15s ease}
+.filters-toggle[aria-expanded="true"] svg{transform:rotate(180deg)}
+.search-actions{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:22px;flex-wrap:wrap}
 .chip{padding:6px 12px;border-radius:20px;font-size:12.5px;border:1px solid var(--line);color:var(--ink-soft);background:var(--surface);cursor:pointer}
 .chip.selected{background:var(--ink);color:#fff;border-color:var(--ink)}
 .sk{display:inline-flex;align-items:center;gap:4px;border-radius:20px;padding:4px 6px 4px 11px;font-size:12.5px;margin:3px 5px 3px 0;border:1px solid var(--line);background:var(--surface);color:var(--ink-soft)}
@@ -158,6 +164,7 @@ textarea.inp{resize:vertical;min-height:96px;font-size:14.5px;padding:13px 15px;
 .cand-name{font-size:16.5px;font-weight:600;font-family:var(--serif)}
 .cand-role{color:var(--muted);font-size:13px;margin-top:2px}
 .cand-tags{margin-top:9px}
+.cand-ai{margin-top:12px;font-size:13.5px;color:#38455F;background:#F7F8F5;border-left:3px solid var(--accent);padding:10px 12px;border-radius:0 var(--radius-s) var(--radius-s) 0}
 .cand-checks{display:grid;grid-template-columns:1fr 1fr;gap:6px 18px;margin-top:13px;font-size:13px}
 @media(max-width:760px){.cand-checks{grid-template-columns:1fr}.cand-top{flex-direction:column;gap:12px}}
 .check-ok,.check-warn{display:flex;gap:7px;align-items:flex-start}
@@ -240,13 +247,13 @@ td .mut{color:var(--muted);font-size:12px}
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M11 11L14.5 14.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
       <span data-i="navMatch">Поиск кандидатов</span>
     </button>
+    <button class="nav-item" data-v="detail" id="navDetail">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.5"/><path d="M3 14c0-2.8 2.2-4.5 5-4.5s5 1.7 5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      <span data-i="navDetail">Карточка кандидата</span>
+    </button>
     <button class="nav-item" data-v="base">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2.3" y="2.5" width="11.4" height="11" rx="1.4" stroke="currentColor" stroke-width="1.3"/><path d="M2.3 6h11.4M5.5 6v7.5" stroke="currentColor" stroke-width="1.3"/></svg>
       <span data-i="navBase">Все резюме</span><span class="tag" id="navBaseCnt">0</span>
-    </button>
-    <button class="nav-item" data-v="detail" id="navDetail" hidden>
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.5"/><path d="M3 14c0-2.8 2.2-4.5 5-4.5s5 1.7 5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-      <span data-i="navDetail">Карточка кандидата</span>
     </button>
     <button class="nav-item" data-v="fav">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 13.2 3.6 15l.9-4.8L1 6.9l4.9-.6L8 2l2.1 4.3 4.9.6-3.5 3.3.9 4.8Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
@@ -285,10 +292,7 @@ td .mut{color:var(--muted);font-size:12px}
 <div class="main">
   <div class="topbar">
     <div class="crumbs" id="crumbs"></div>
-    <div class="topstats">
-      <span><span data-i="stBase">В базе</span>: <b id="topCount">0</b></span>
-      <span><span data-i="stPos">Позиций</span>: <b id="topPos">0</b></span>
-    </div>
+    <div class="user" id="meBox"></div>
   </div>
 
 <!-- ============ ПОИСК КАНДИДАТОВ ============ -->
@@ -296,70 +300,64 @@ td .mut{color:var(--muted);font-size:12px}
   <div class="section-title-row">
     <div>
       <h2 data-i="searchH">Кого вы ищете?</h2>
-      <p data-i="searchP">Опишите вакансию свободным текстом — платформа разберёт его на требования: должность, минимальный опыт, навыки, город и язык. Поля ниже можно поправить вручную.</p>
+      <p data-i="searchP">Опишите вакансию свободным текстом — платформа сама определит должность, опыт и ключевые компетенции. Поля ниже не обязательны и нужны только для уточнения.</p>
     </div>
   </div>
 
   <div class="panel">
-    <textarea class="inp" id="qFree" placeholder="Нужен главный бухгалтер. Опыт от 5 лет, обязательно 1С и МСФО, высшее образование, Душанбе."></textarea>
-    <div class="row" style="margin-top:12px">
-      <button class="btn btn-line btn-sm" onclick="applyQuery()"><span data-i="parseQ">Разобрать запрос</span></button>
-      <span class="hint" id="qHint" data-i="parseHint">Разбор идёт по словарю навыков — пополняйте его в настройках под свои позиции.</span>
-    </div>
+    <textarea class="inp" id="qFree" placeholder="Нужен главный инженер для строительной компании. Опыт от 7 лет, желательно опыт работы с крупными промышленными объектами, знание строительных норм, управление командой от 20 человек. Душанбе или готов к переезду."></textarea>
+    <p class="hint" id="qHint" style="margin-top:8px" data-i="parseHint">Платформа разберёт описание на требования: позицию, минимальный опыт, образование, навыки, город и язык.</p>
 
-    <div class="grid g3" style="margin-top:20px;padding-top:20px;border-top:1px solid var(--line)">
-      <div class="field"><label data-i="cPos">Название позиции</label><input class="inp" id="cPos" placeholder="Главный бухгалтер"></div>
-      <div class="field"><label data-i="cExp">Минимальный опыт, лет</label><input class="inp" id="cExp" type="number" min="0" max="40" value="0"></div>
-      <div class="field"><label data-i="cEdu">Образование не ниже</label><select class="inp" id="cEdu">
-        <option value="0" data-i="eduAny">не важно</option><option value="2" data-i="eduMid">среднее специальное</option>
-        <option value="3" data-i="eduInc">неоконченное высшее</option><option value="4" data-i="eduHi">высшее</option></select></div>
-    </div>
-
-    <div class="grid g2" style="margin-top:14px">
-      <div class="field">
-        <label><span data-i="cMust">Обязательные навыки</span></label>
-        <input class="inp" id="mustIn" placeholder="1С, МСФО…" onkeydown="if(event.key==='Enter'){addSk('must');event.preventDefault()}">
-        <div id="mustBox" style="margin-top:8px"></div>
-      </div>
-      <div class="field">
-        <label><span data-i="cNice">Желательные навыки</span></label>
-        <input class="inp" id="niceIn" placeholder="Excel, английский…" onkeydown="if(event.key==='Enter'){addSk('nice');event.preventDefault()}">
-        <div id="niceBox" style="margin-top:8px"></div>
-      </div>
-    </div>
-
-    <div class="grid g3" style="margin-top:14px">
-      <div class="field"><label data-i="cCity">Город</label><select class="inp" id="cCity"></select></div>
-      <div class="field"><label data-i="cLang">Язык</label><select class="inp" id="cLang"></select></div>
-      <div class="field"><label data-i="cCat">Категория должности</label><select class="inp" id="cCat"></select></div>
-    </div>
-
-    <button class="btn btn-ghost btn-sm" id="moreT" style="margin-top:14px;padding-left:0"
-      aria-expanded="false" onclick="toggleMore(this)">
-      <span data-i="moreFields">Дополнительные поля поиска</span>
+    <button class="filters-toggle" id="moreT" aria-expanded="false" onclick="toggleMore(this)">
+      <span data-i="moreFields">Дополнительные структурированные поля</span>
       <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>
-    <div id="moreBox" hidden style="margin-top:4px;padding-top:16px;border-top:1px solid var(--line)">
-      <div class="grid g4">
+
+    <div id="moreBox" hidden>
+      <div class="grid g4" style="margin-top:16px;padding-top:18px;border-top:1px solid var(--line)">
+        <div class="field"><label data-i="cPos">Название позиции</label><input class="inp" id="cPos" placeholder="Главный бухгалтер"></div>
         <div class="field"><label data-i="cFio">ФИО кандидата</label><input class="inp" id="cFio" placeholder="если ищете конкретного человека"></div>
         <div class="field"><label data-i="cGender">Пол</label><select class="inp" id="cGender"></select></div>
-        <div class="field"><label data-i="cExpTo">Опыт до, лет</label><input class="inp" id="cExpTo" type="number" min="0" max="50" placeholder="—"></div>
+        <div class="field"><label data-i="cCat">Категория должности</label><select class="inp" id="cCat"></select></div>
+      </div>
+      <div class="grid g4" style="margin-top:14px">
+        <div class="field"><label data-i="cExp">Стаж, от</label><input class="inp" id="cExp" type="number" min="0" max="40" value="0"></div>
+        <div class="field"><label data-i="cExpTo">Стаж, до</label><input class="inp" id="cExpTo" type="number" min="0" max="50" placeholder="—"></div>
+        <div class="field"><label data-i="cEdu">Образование не ниже</label><select class="inp" id="cEdu">
+          <option value="0" data-i="eduAny">не важно</option><option value="2" data-i="eduMid">среднее специальное</option>
+          <option value="3" data-i="eduInc">неоконченное высшее</option><option value="4" data-i="eduHi">высшее</option></select></div>
         <div class="field"><label data-i="cTop">Размер шорт-листа</label><input class="inp" id="cTop" type="number" min="3" max="100" value="10"></div>
       </div>
-      <div class="field" style="margin-top:14px"><label data-i="cExtra">Дополнительные требования</label>
-        <input class="inp" id="cExtra" placeholder="через запятую: командировки, английский язык, работа с подрядчиками">
-        <div class="hint" style="margin-top:6px" data-i="extraHint">через запятую: командировки, английский язык, работа с подрядчиками</div></div>
+      <div class="grid g2" style="margin-top:14px">
+        <div class="field">
+          <label><span data-i="cMust">Обязательные навыки</span></label>
+          <input class="inp" id="mustIn" placeholder="1С, МСФО…" onkeydown="if(event.key==='Enter'){addSk('must');event.preventDefault()}">
+          <div id="mustBox" style="margin-top:8px"></div>
+        </div>
+        <div class="field">
+          <label><span data-i="cNice">Желательные навыки</span></label>
+          <input class="inp" id="niceIn" placeholder="Excel, английский…" onkeydown="if(event.key==='Enter'){addSk('nice');event.preventDefault()}">
+          <div id="niceBox" style="margin-top:8px"></div>
+        </div>
+      </div>
+      <div class="grid g3" style="margin-top:14px">
+        <div class="field"><label data-i="cCity">Город</label><select class="inp" id="cCity"></select></div>
+        <div class="field"><label data-i="cLang">Язык</label><select class="inp" id="cLang"></select></div>
+        <div class="field"><label data-i="cExtra">Дополнительная информация</label>
+          <input class="inp" id="cExtra" placeholder="например: командировки, английский язык, работа с подрядчиками"></div>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink-soft)">
+          <input type="checkbox" id="strict" checked> <span data-i="strictLbl">жёсткий отсев по обязательным навыкам</span></label>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="clearCrit()"><span data-i="clearCrit">Сбросить</span></button>
+      </div>
     </div>
 
-    <div class="row" style="margin-top:20px;justify-content:space-between">
-      <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink-soft)">
-        <input type="checkbox" id="strict" checked> <span data-i="strictLbl">жёсткий отсев по обязательным навыкам</span></label>
-      <div class="row">
-        <button class="btn btn-ghost btn-sm" onclick="clearCrit()"><span data-i="clearCrit">Сбросить</span></button>
-        <button class="btn btn-primary" onclick="runMatch()">
-          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="5" stroke="white" stroke-width="1.5"/><path d="M11 11L14.5 14.5" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg>
-          <span data-i="runMatch">Построить шорт-лист</span></button>
-      </div>
+    <div class="search-actions">
+      <span class="hint" data-i="searchHow">Поиск по разобранным полям резюме и словарю навыков, ранжирование по весам критериев.</span>
+      <button class="btn btn-primary" onclick="findCandidates()">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="5" stroke="white" stroke-width="1.5"/><path d="M11 11L14.5 14.5" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg>
+        <span data-i="findBtn">Найти кандидатов</span></button>
     </div>
   </div>
 
@@ -607,8 +605,8 @@ ru:{appName:'База кандидатов',appOrg:'ООО «Авесто Гру
  navMatch:'Поиск кандидатов',navBase:'Все резюме',navDetail:'Карточка кандидата',navLoad:'Загрузка резюме',navBx:'Битрикс24',navSet:'Настройки',
  archPlat:'Платформа',archNote:'ИИ получает данные только от платформы — прямого доступа к Диску у него нет.',
  stBase:'В базе',stPos:'Позиций',
- searchH:'Кого вы ищете?',searchP:'Опишите вакансию свободным текстом — платформа разберёт его на требования: должность, минимальный опыт, навыки, город и язык. Поля ниже можно поправить вручную.',
- parseQ:'Разобрать запрос',parseHint:'Разбор идёт по словарю навыков — пополняйте его в настройках под свои позиции.',
+ searchH:'Кого вы ищете?',searchP:'Опишите вакансию свободным текстом — платформа сама определит должность, опыт и ключевые компетенции. Поля ниже не обязательны и нужны только для уточнения.',
+ parseQ:'Разобрать запрос',parseHint:'Платформа разберёт описание на требования: позицию, минимальный опыт, образование, навыки, город и язык.',
  cPos:'Название позиции',cExp:'Минимальный опыт, лет',cEdu:'Образование не ниже',
  eduAny:'не важно',eduMid:'среднее специальное',eduInc:'неоконченное высшее',eduHi:'высшее',
  cMust:'Обязательные навыки — отсеивают',cNice:'Желательные навыки — добавляют баллы',cCity:'Город',cLang:'Язык',cTop:'Размер шорт-листа',
@@ -642,7 +640,7 @@ ru:{appName:'База кандидатов',appOrg:'ООО «Авесто Гру
  yrs:'лет',total:'Всего файлов',parsed:'Добавлено',scans:'Сканов',dupes:'Повторов',
  emptyBase:'База пуста',emptyBaseSub:'Загрузите резюме на вкладке «Загрузка резюме».',
  nothing:'Ничего не найдено',nothingSub:'Измените условия поиска.',
- shortlist:'Шорт-лист',of:'из',cands:'кандидатов',excluded:'отсеяно',score:'Соответствие',
+ shortlist:'Шорт-лист',found:'Найдено',of:'из',cands:'кандидатов',excluded:'отсеяно',score:'Соответствие',
  why:'Как рассчитан процент?',copyAi:'Скопировать обезличенный шорт-лист',printL:'Печать',copied:'Скопировано',
  noCrit:'Критерии не заданы',noCritSub:'Опишите вакансию в поле выше или заполните поля вручную.',
  backRes:'Назад к шорт-листу',backBase:'Назад ко всем резюме',more:'Подробнее',
@@ -665,6 +663,10 @@ ru:{appName:'База кандидатов',appOrg:'ООО «Авесто Гру
  anyCity:'любой',anyLang:'любой',anyPos:'все позиции',anyEdu:'любое',anyStatus:'все статусы',
  qRead:'Распознано из запроса',qNone:'В запросе не нашлось ни одного требования — заполните поля вручную.',
  inBase:'кандидатов в базе',posCnt:'позиций',avgExp:'лет опыта в среднем',scanCnt:'сканов без текста',
+ findBtn:'Найти кандидатов',searchHow:'Поиск по разобранным полям резюме и словарю навыков, ранжирование по весам критериев.',
+ openRes:'Открыть резюме',updAt:'обновлено',searchMonth:'поисков за месяц',inFav:'в избранном',
+ meRole:'укажите пользователя в администрировании',makeMe:'сделать текущим',
+ noCard:'Карточка не открыта',noCardSub:'Выберите кандидата в шорт-листе или в списке всех резюме.',
  zipOpen:'распаковываю архив',zipFound:'резюме в архиве',zipBad:'архив не читается',
  zipNoLib:'библиотека распаковки архивов недоступна — положите lib/jszip.min.js рядом со страницей',
  sumExp:'опыта',sumSkills:'ключевые навыки',
@@ -673,7 +675,7 @@ ru:{appName:'База кандидатов',appOrg:'ООО «Авесто Гру
  cReloc:'Готовность к переезду',relocYes:'рассматривает',relocNo:'не готов',relocUnk:'не указано',
  cApplied:'Дата отклика',cFio:'ФИО кандидата',fioHint:'если ищете конкретного человека',
  cExpTo:'до',cExtra:'Дополнительные требования',extraHint:'через запятую: командировки, английский язык, работа с подрядчиками',
- moreFields:'Дополнительные поля поиска',sortBy:'Сортировка',sortScore:'по соответствию',sortExp:'по опыту',sortNew:'по дате отклика',
+ moreFields:'Дополнительные структурированные поля',sortBy:'Сортировка',sortScore:'по соответствию',sortExp:'по опыту',sortNew:'по дате отклика',
  showMore:'Показать ещё',ofTotal:'показано',
  navFav:'Избранное',navAdmin:'Администрирование',
  favH:'Избранное',favP:'Подборки кандидатов по вакансиям и история поисковых запросов.',
@@ -700,7 +702,7 @@ tj:{appName:'Пойгоҳи номзадҳо',appOrg:'ҶДММ «Авесто Г
  archPlat:'Платформа',archNote:'ЗС маълумотро танҳо аз платформа мегирад — дастрасии мустақим ба Диск надорад.',
  stBase:'Дар пойгоҳ',stPos:'Вазифаҳо',
  searchH:'Киро меҷӯед?',searchP:'Вакансияро бо матни озод тавсиф кунед — платформа онро ба талабот ҷудо мекунад: вазифа, таҷрибаи ҳадди ақал, малакаҳо, шаҳр ва забон. Майдонҳои поёнро дастӣ ислоҳ кардан мумкин аст.',
- parseQ:'Таҳлили дархост',parseHint:'Таҳлил аз рӯи луғати малакаҳо меравад — онро дар танзимот пурра кунед.',
+ parseQ:'Таҳлили дархост',parseHint:'Платформа тавсифро ба талабот ҷудо мекунад: вазифа, таҷрибаи ҳадди ақал, маълумот, малакаҳо, шаҳр ва забон.',
  cPos:'Номи вазифа',cExp:'Таҷрибаи ҳадди ақал, сол',cEdu:'Маълумот на камтар аз',
  eduAny:'муҳим нест',eduMid:'миёнаи махсус',eduInc:'олии нотамом',eduHi:'олӣ',
  cMust:'Малакаҳои ҳатмӣ — ҷудо мекунанд',cNice:'Малакаҳои матлуб — хол меафзоянд',cCity:'Шаҳр',cLang:'Забон',cTop:'Ҳаҷми рӯйхати кӯтоҳ',
@@ -734,7 +736,7 @@ tj:{appName:'Пойгоҳи номзадҳо',appOrg:'ҶДММ «Авесто Г
  yrs:'сол',total:'Ҳамагӣ файл',parsed:'Илова шуд',scans:'Сканҳо',dupes:'Такрорҳо',
  emptyBase:'Пойгоҳ холӣ аст',emptyBaseSub:'Резюмеро дар варақаи «Боргузории резюме» бор кунед.',
  nothing:'Чизе ёфт нашуд',nothingSub:'Шартҳои ҷустуҷӯро тағйир диҳед.',
- shortlist:'Рӯйхати кӯтоҳ',of:'аз',cands:'номзад',excluded:'ҷудо шуд',score:'Мутобиқат',
+ shortlist:'Рӯйхати кӯтоҳ',found:'Ёфт шуд',of:'аз',cands:'номзад',excluded:'ҷудо шуд',score:'Мутобиқат',
  why:'Фоиз чӣ тавр ҳисоб шуд?',copyAi:'Нусхабардории рӯйхати беном',printL:'Чоп',copied:'Нусха гирифта шуд',
  noCrit:'Меъёрҳо гузошта нашудаанд',noCritSub:'Вакансияро дар майдони боло тавсиф кунед ё майдонҳоро дастӣ пур кунед.',
  backRes:'Бозгашт ба рӯйхати кӯтоҳ',backBase:'Бозгашт ба ҳамаи резюме',more:'Муфассал',
@@ -757,6 +759,10 @@ tj:{appName:'Пойгоҳи номзадҳо',appOrg:'ҶДММ «Авесто Г
  anyCity:'ҳар кадом',anyLang:'ҳар кадом',anyPos:'ҳамаи вазифаҳо',anyEdu:'ҳар кадом',anyStatus:'ҳамаи ҳолатҳо',
  qRead:'Аз дархост шинохта шуд',qNone:'Дар дархост ягон талабот ёфт нашуд — майдонҳоро дастӣ пур кунед.',
  inBase:'номзад дар пойгоҳ',posCnt:'вазифа',avgExp:'сол таҷрибаи миёна',scanCnt:'скани бематн',
+ findBtn:'Ёфтани номзадҳо',searchHow:'Ҷустуҷӯ аз рӯи майдонҳои таҳлилшуда ва луғати малакаҳо, рейтинг аз рӯи вазни меъёрҳо.',
+ openRes:'Кушодани резюме',updAt:'навсозӣ',searchMonth:'ҷустуҷӯ дар як моҳ',inFav:'дар интихобшуда',
+ meRole:'корбарро дар маъмурият нишон диҳед',makeMe:'ҳамчун ҷорӣ',
+ noCard:'Варақа кушода нашуд',noCardSub:'Номзадро дар рӯйхати кӯтоҳ ё дар ҳамаи резюме интихоб кунед.',
  zipOpen:'бойгонӣ кушода мешавад',zipFound:'резюме дар бойгонӣ',zipBad:'бойгонӣ хонда намешавад',
  zipNoLib:'китобхонаи кушодани бойгонӣ дастрас нест — lib/jszip.min.js-ро дар паҳлуи саҳифа гузоред',
  sumExp:'таҷриба',sumSkills:'малакаҳои асосӣ',
@@ -765,7 +771,7 @@ tj:{appName:'Пойгоҳи номзадҳо',appOrg:'ҶДММ «Авесто Г
  cReloc:'Омодагӣ ба кӯчиш',relocYes:'баррасӣ мекунад',relocNo:'омода нест',relocUnk:'нишон нашудааст',
  cApplied:'Санаи дархост',cFio:'Ному насаби номзад',fioHint:'агар шахси мушаххасро ҷӯед',
  cExpTo:'то',cExtra:'Талаботи иловагӣ',extraHint:'бо вергул: сафарҳои хизматӣ, забони англисӣ, кор бо пудратчиён',
- moreFields:'Майдонҳои иловагии ҷустуҷӯ',sortBy:'Мураттабсозӣ',sortScore:'аз рӯи мутобиқат',sortExp:'аз рӯи таҷриба',sortNew:'аз рӯи санаи дархост',
+ moreFields:'Майдонҳои иловагии сохторӣ',sortBy:'Мураттабсозӣ',sortScore:'аз рӯи мутобиқат',sortExp:'аз рӯи таҷриба',sortNew:'аз рӯи санаи дархост',
  showMore:'Боз нишон додан',ofTotal:'нишон дода шуд',
  navFav:'Интихобшуда',navAdmin:'Маъмурият',
  favH:'Интихобшуда',favP:'Маҷмӯаҳои номзадҳо аз рӯи вакансия ва таърихи дархостҳо.',
@@ -810,7 +816,7 @@ function setLang(l){
   qFree.placeholder = l==='tj'
     ? 'Сарҳисобдор лозим аст. Таҷриба аз 5 сол, ҳатман 1С ва МСФО, маълумоти олӣ, Душанбе.'
     : 'Нужен главный бухгалтер. Опыт от 5 лет, обязательно 1С и МСФО, высшее образование, Душанбе.';
-  crumb(); fillSelects(); renderSk(); renderWeights(); renderBase(); renderStats(); renderBxMode(); renderBxHow(); renderFav(); renderAdmin();
+  crumb(); fillSelects(); renderSk(); renderWeights(); renderBase(); renderStats(); renderBxMode(); renderBxHow(); renderFav(); renderAdmin(); renderMe();
   if(LAST_SHORT.length) runMatch();
   if(OPEN_ID) renderDetail();
 }
@@ -1162,15 +1168,17 @@ function pickRelocation(raw){
 }
 
 /* Краткая сводка — из уже разобранных полей, без домысливания. */
+const up = t => t ? t[0].toUpperCase()+t.slice(1) : t;
 function makeSummary(c){
   const part = [];
   if(c.position) part.push(c.position);
   if(c.exp!=null) part.push(c.exp+' '+T('yrs')+' '+T('sumExp'));
   if(c.city) part.push(c.city);
   let s = part.join(' · ');
-  if(c.edu) s += (s?'. ':'') + T('cEduT').toLowerCase()+' — '+EDU_NAME[c.edu][LANG];
-  if(c.skills && c.skills.length) s += (s?'. ':'') + T('sumSkills')+': '+c.skills.slice(0,6).join(', ');
-  return s || null;
+  if(c.edu) s += (s?'. ':'') + up(T('cEduT'))+' — '+EDU_NAME[c.edu][LANG];
+  if(c.skills && c.skills.length) s += (s?'. ':'') + up(T('sumSkills'))+': '+c.skills.slice(0,6).join(', ');
+  if(c.relocation==='yes') s += (s?'. ':'') + up(T('cReloc'))+' — '+T('relocYes');
+  return s ? s.replace(/\s+/g,' ').trim() : null;
 }
 
 function parseResume(text, meta){
@@ -1551,9 +1559,17 @@ function renderStats(){
   const scans = DATA.filter(c=>c.scan).length;
   const withExp = DATA.filter(c=>c.exp!=null);
   const avg = withExp.length ? (withExp.reduce((s,c)=>s+c.exp,0)/withExp.length).toFixed(1) : '—';
-  topCount.textContent = DATA.length; topPos.textContent = pos;
-  statStrip.innerHTML = [[DATA.length,T('inBase')],[pos,T('posCnt')],[avg,T('avgExp')],[scans,T('scanCnt')]]
-    .map(([n,l])=>`<div class="stat"><span class="num">${esc(n)}</span><span class="label">${esc(l)}</span></div>`).join('');
+  const month = Date.now()-30*864e5;
+  const searches = HIST.filter(h=>h.date>month).length;
+  const favCnt = FAV.reduce((a,f)=>a+f.items.length,0);
+  const upd = SYNC.last || Math.max(0, ...DATA.map(c=>c.added||0));
+  statStrip.innerHTML = [
+    [DATA.length, T('inBase')],
+    [upd?new Date(upd).toLocaleTimeString(LANG==='tj'?'tg-TJ':'ru-RU',{hour:'2-digit',minute:'2-digit'}):'—',
+      upd?T('updAt')+' '+fmtDate(upd):T('admNever')],
+    [searches, T('searchMonth')],
+    [favCnt, T('inFav')]
+  ].map(([n,l])=>`<div class="stat"><span class="num">${esc(n)}</span><span class="label">${esc(l)}</span></div>`).join('');
 }
 
 /* ============================================================
@@ -1597,6 +1613,12 @@ function applyQuery(){
   qHint.textContent = found.length ? T('qRead')+' — '+found.join(' · ') : T('qNone');
 }
 
+/* Кнопка «Найти кандидатов» делает оба шага сразу: разбирает описание
+   вакансии и строит шорт-лист. Поля под раскрывающимся блоком — уточнение. */
+function findCandidates(){
+  if(qFree.value.trim()) applyQuery();
+  runMatch();
+}
 function currentCrit(){
   const extra = (window.cExtra && cExtra.value ? cExtra.value.split(',').map(x=>x.trim()).filter(Boolean) : []);
   return { pos:cPos.value.trim(), exp:+cExp.value||0, edu:+cEdu.value||0,
@@ -1633,7 +1655,7 @@ function runMatch(){
   pushHist(crit);
   matchOut.innerHTML = `
    <div class="results-head">
-     <h3>${esc(T('shortlist'))} · <span class="num">${keep.length}</span> ${esc(T('of'))} <span class="num">${DATA.length}</span> ${esc(T('cands'))}${out?` · ${esc(T('excluded'))}: <span class="num">${out}</span>`:''}</h3>
+     <h3>${esc(T('found'))}: <span class="num">${keep.length}</span> ${esc(T('cands'))}${out?` · ${esc(T('excluded'))}: <span class="num">${out}</span>`:''}</h3>
      <div class="row">
        <select class="inp" style="width:auto;padding:6px 9px;font-size:12.5px" onchange="SORT_RES=this.value;runMatch()">
          <option value="score"${SORT_RES==='score'?' selected':''}>${esc(T('sortBy'))}: ${esc(T('sortScore'))}</option>
@@ -1667,8 +1689,8 @@ function candCard(s,i){
          ${s.miss.map(w=>`<div class="check-warn">${ICON_WN}${esc(w)}</div>`).join('')}
        </div>
        <div class="cand-actions">
+         ${c.url?`<a class="btn btn-line btn-sm" href="${esc(c.url)}" target="_blank" rel="noopener">${esc(T('openRes'))}</a>`:''}
          <button class="btn btn-primary btn-sm" onclick="openD(${jid})">${esc(T('more'))}</button>
-         ${c.url?`<a class="btn btn-line btn-sm" href="${esc(c.url)}" target="_blank" rel="noopener">${esc(T('openFile'))}</a>`:''}
          <button class="btn btn-line btn-sm ${c.verdict==='fit'?'fit-on':''}" onclick="event.stopPropagation();setVerdict(${jid},'fit')">${esc(T('fit'))}</button>
          <button class="btn btn-line btn-sm ${c.verdict==='unfit'?'unfit-on':''}" onclick="event.stopPropagation();setVerdict(${jid},'unfit')">${esc(T('unfit'))}</button>
          <button class="why-toggle" aria-expanded="false" onclick="toggleWhy(${i},this)">${esc(T('why'))}</button>
@@ -1723,11 +1745,14 @@ let OPEN_ID=null, BACK_TO='base';
 function openD(id){
   const c = DATA.find(x=>x.id===id); if(!c) return;
   BACK_TO = document.getElementById('v-match').classList.contains('active') ? 'match' : 'base';
-  OPEN_ID = id; navDetail.hidden = false;
+  OPEN_ID = id;
   renderDetail(); go('detail');
 }
 function renderDetail(){
-  const c = DATA.find(x=>x.id===OPEN_ID); if(!c) return;
+  const c = DATA.find(x=>x.id===OPEN_ID);
+  if(!c){ detailOut.innerHTML = `<div class="panel"><div class="empty">
+      <div class="big">${esc(T('noCard'))}</div><div>${esc(T('noCardSub'))}</div></div></div>`;
+    crumb(); return; }
   const s = LAST_CRIT ? scoreCandidate(c, LAST_CRIT) : null;
   const st = c.status||'new';
   const reco = !s||s.noCrit ? '' : (s.out ? T('recoNo') : (s.score>=80 ? T('recoYes') : T('recoMaybe')));
@@ -2057,7 +2082,7 @@ function exportCsv(){
 function exportJson(){ dl('baza_kandidatov_'+new Date().toISOString().slice(0,10)+'.json', JSON.stringify(DATA), 'application/json'); }
 async function wipe(){
   if(!confirm(T('wipeAsk'))) return;
-  await dbClear(); DATA=[]; OPEN_ID=null; navDetail.hidden=true; LAST_SHORT=[]; LAST_CRIT=null; matchOut.innerHTML='';
+  await dbClear(); DATA=[]; OPEN_ID=null; LAST_SHORT=[]; LAST_CRIT=null; matchOut.innerHTML='';
   refresh(); loadKpis.style.display='none';
 }
 function saveDict(){ localStorage.setItem('avb_skills', skDict.value); SKILLS=parseDict(skDict.value); KEY_CACHE.clear(); toast(T('saved')); }
@@ -2178,16 +2203,32 @@ function renderAdmin(){
     ? '<thead><tr><th>'+esc(T('admName'))+'</th><th>'+esc(T('admRole'))+'</th><th>'+esc(T('admAccess'))+'</th><th></th></tr></thead><tbody>'
       + USERS.map((u,i)=>`<tr><td class="nm">${esc(u.name)}</td><td><span class="pill">${esc(T(ROLES[u.role][0]))}</span></td>
           <td class="mut">${esc(T(ROLES[u.role][1]))}</td>
-          <td style="text-align:right"><button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="delUser(${i})">${esc(T('del'))}</button></td></tr>`).join('')
+          <td style="text-align:right">${ME&&ME.name===u.name?'':`<button class="btn btn-ghost btn-sm" onclick="setMe(${i})">${esc(T('makeMe'))}</button>`}
+            <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="delUser(${i})">${esc(T('del'))}</button></td></tr>`).join('')
       + '</tbody>'
     : '<tbody><tr><td class="mut" style="padding:14px">—</td></tr></tbody>';
 }
+let ME = LS('avb_me', null);
+function renderMe(){
+  if(ME){
+    const ini = ME.name.split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase();
+    meBox.innerHTML = `<div class="avatar">${esc(ini)}</div>
+      <div class="who">${esc(ME.name)}<span class="role">${esc(T(ROLES[ME.role][0]))}</span></div>`;
+  } else {
+    meBox.innerHTML = `<button class="btn btn-ghost btn-sm" onclick="go('admin')">${esc(T('meRole'))}</button>`;
+  }
+}
+function setMe(i){ ME = {name:USERS[i].name, role:USERS[i].role}; LSS('avb_me', ME); renderMe(); renderAdmin(); }
 function addUser(){
   const n = uName.value.trim(); if(!n) return;
   USERS.push({name:n, role:uRole.value||'hr', added:Date.now()});
-  LSS('avb_users', USERS); uName.value=''; renderAdmin(); toast(T('saved'));
+  LSS('avb_users', USERS); uName.value='';
+  if(!ME) setMe(USERS.length-1);
+  renderAdmin(); renderMe(); toast(T('saved'));
 }
-function delUser(i){ USERS.splice(i,1); LSS('avb_users',USERS); renderAdmin(); }
+function delUser(i){ const u=USERS[i]; USERS.splice(i,1); LSS('avb_users',USERS);
+  if(ME && u && ME.name===u.name){ ME=null; LSS('avb_me',null); }
+  renderAdmin(); renderMe(); }
 function setSync(m){
   SYNC.interval = m; LSS('avb_sync', SYNC); armSync(); renderAdmin(); toast(T('saved'));
 }
@@ -2228,6 +2269,7 @@ function go(v){
     const on = b.dataset.v===v; b.classList.toggle('active',on);
     if(on) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current');
   });
+  if(v==='detail') renderDetail();
   if(v==='fav') renderFav();
   if(v==='admin'){ renderBxMode(); renderBxHow(); renderAdmin(); }
   crumb(); window.scrollTo({top:0,behavior:'instant'});
@@ -2272,7 +2314,7 @@ impIn.addEventListener('change', async e=>{
   skDict.value = localStorage.getItem('avb_skills') || DEFAULT_SKILLS;
   bxHook.value = localStorage.getItem('avb_hook') || '';
   bxFolder.value = localStorage.getItem('avb_folder') || '';
-  setLang(LANG); refresh(); armSync(); go('match');
+  setLang(LANG); refresh(); armSync(); renderMe(); go('match');
 })();
 
 /* экспорт для автотестов */

@@ -112,11 +112,11 @@ const RELOC = [
 
   // ---- поиск с доп. фильтрами ----
   await p.click('[data-v=match]'); await p.waitForTimeout(200);
+  await p.click('#moreT'); await p.waitForTimeout(250);
   await p.fill('#cPos', 'Бухгалтер');
   await p.fill('#mustIn', '1С'); await p.press('#mustIn', 'Enter');
-  await p.click('#moreT'); await p.waitForTimeout(200);
   await p.selectOption('#cGender', 'ж');
-  await p.click('button:has-text("Построить шорт-лист")'); await p.waitForTimeout(600);
+  await p.click('button:has-text("Найти кандидатов")'); await p.waitForTimeout(600);
   const cards = await p.locator('.cand-card').count();
   check('фильтр по полу применяется к пулу', cards === 1, `карточек ${cards}`);
 
