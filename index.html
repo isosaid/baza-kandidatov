@@ -2244,6 +2244,31 @@ function saveFav(){
 }
 function delFav(id){ FAV = FAV.filter(f=>f.id!==id); LSS('avb_fav',FAV); renderFav(); }
 function delHist(i){ HIST.splice(i,1); LSS('avb_hist',HIST); renderFav(); }
+function applyAndSave(crit){
+  // Запускаем поиск по критериям прямо здесь (без перехода на экран)
+  cPos.value = crit.pos||''; cExp.value = crit.exp||0; cEdu.value = String(crit.edu||0);
+  MUST = (crit.must||[]).slice(); NICE = (crit.nice||[]).slice(); renderSk();
+  fillSelects();
+  cCity.value = crit.city||''; cLang.value = crit.lang||''; if(cCat) cCat.value = crit.cat||'';
+  if(cFio) cFio.value = crit.fio||''; if(cGender) cGender.value = crit.gender||'';
+  if(cExpTo) cExpTo.value = crit.expTo||''; if(cExtra) cExtra.value = (crit.extra||[]).join(', ');
+  strict.checked = crit.strict!==false;
+  runMatch(); // заполняет LAST_SHORT
+  if(!LAST_SHORT.length){ toast(T('posNoShort')); return; }
+  const prof = cPos.value.trim() || T('shortlist');
+  const existing = FAV.find(f => f.name === prof);
+  if(existing){
+    const existIds = new Set(existing.items.map(i=>i.id));
+    LAST_SHORT.forEach(x=>{ if(!existIds.has(x.c.id)) existing.items.push({id:x.c.id, name:x.c.name||x.c.file, score:x.score}); });
+    existing.date = Date.now();
+  } else {
+    FAV.unshift({ id:'f'+Date.now(), name:prof, date:Date.now(), crit:currentCrit(),
+      items: LAST_SHORT.map(x=>({id:x.c.id, name:x.c.name||x.c.file, score:x.score})) });
+  }
+  LSS('avb_fav', FAV); renderFav();
+  toast('📁 ' + prof + ': ' + T('saved'));
+  go('fav');
+}
 function applyCrit(crit){
   cPos.value = crit.pos||''; cExp.value = crit.exp||0; cEdu.value = String(crit.edu||0);
   MUST = (crit.must||[]).slice(); NICE = (crit.nice||[]).slice(); renderSk();
@@ -2289,6 +2314,8 @@ function renderFav(){
       <button class="btn btn-ghost btn-sm" style="flex:1;justify-content:flex-start;color:var(--ink);font-weight:500;padding:0"
         onclick="applyCrit(${jsArg(h.crit)})">${esc(h.label)}</button>
       <span class="hint">${esc(fmtDate(h.date))}</span>
+      <button class="btn btn-line btn-sm" style="font-size:11px;padding:3px 8px" onclick="applyAndSave(${jsArg(h.crit)})">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="margin-right:3px"><path d="M2 5h12v6a1 1 0 01-1 1H3a1 1 0 01-1-1V5z" stroke="currentColor" stroke-width="1.4"/><path d="M2 5V4a1 1 0 011-1h3.172a1 1 0 01.707.293L8 4.465" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>В папку</button>
       <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="delHist(${i})">${esc(T('del'))}</button>
     </div>`).join('') : `<p class="hint">${esc(T('favHistEmpty'))}</p>`;
 
