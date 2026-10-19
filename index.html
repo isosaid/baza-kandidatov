@@ -2358,8 +2358,10 @@ function addCandToPos(posId){
 
 function renderPositions(){
   const posCnt = POSITIONS.filter(p=>p.status!=='closed').length;
-  navPosCnt.textContent = posCnt || '';
-  navPosCnt.style.display = posCnt ? '' : 'none';
+  if(typeof navPosCnt !== 'undefined' && navPosCnt){
+    navPosCnt.textContent = posCnt || '';
+    navPosCnt.style.display = posCnt ? '' : 'none';
+  }
   if(!POSITIONS.length){
     posOut.innerHTML=`<div class="panel"><div class="empty"><div class="big">${esc(T('posEmpty'))}</div><div>${esc(T('posEmptySub'))}</div></div></div>`; return;
   }
