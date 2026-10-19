@@ -2220,8 +2220,9 @@ const fmtDT   = t => t ? new Date(t).toLocaleString(LANG==='tj'?'tg-TJ':'ru-RU',
 /* ---------- избранное ---------- */
 function saveFav(){
   if(!LAST_SHORT.length){ toast(T('posNoShort')); return; }
-  // Название папки = должность из ТЗ (или «Шорт-лист»), без prompt
-  const prof = cPos.value.trim() || T('shortlist');
+  // Блокируем сохранение без должности — папка «Шорт-лист» не имеет смысла
+  const prof = cPos.value.trim();
+  if(!prof){ toast('Укажите должность в поле «Должность» перед сохранением'); return; }
   // Если папка с таким названием уже есть — добавляем кандидатов в неё
   const existing = FAV.find(f => f.name === prof);
   if(existing){
@@ -2251,7 +2252,8 @@ function applyAndSave(crit){
   strict.checked = crit.strict!==false;
   runMatch(); // заполняет LAST_SHORT
   if(!LAST_SHORT.length){ toast(T('posNoShort')); return; }
-  const prof = cPos.value.trim() || T('shortlist');
+  const prof = cPos.value.trim() || crit.pos || '';
+  if(!prof){ toast('Укажите должность для сохранения в папку'); return; }
   const existing = FAV.find(f => f.name === prof);
   if(existing){
     const existIds = new Set(existing.items.map(i=>i.id));
