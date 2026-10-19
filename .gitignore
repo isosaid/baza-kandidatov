@@ -6,3 +6,4 @@ tests/truth.json
 tests/last_run.json
 *.log
 .DS_Store
+tests/*.png

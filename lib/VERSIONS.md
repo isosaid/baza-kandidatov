@@ -8,14 +8,16 @@
 |---|---|---|---|
 | `pdf.min.js`, `pdf.worker.min.js` | [pdfjs-dist](https://github.com/mozilla/pdf.js) | 3.11.174 | Apache-2.0 |
 | `mammoth.browser.min.js` | [mammoth.js](https://github.com/mwilliamson/mammoth.js) | 1.6.0 | BSD-2-Clause |
+| `jszip.min.js` | [JSZip](https://github.com/Stuk/jszip) | 3.10.1 | MIT |
 
 Обновление:
 
 ```bash
-npm install pdfjs-dist@<версия> mammoth@<версия>
+npm install pdfjs-dist@<версия> mammoth@<версия> jszip@<версия>
 cp node_modules/pdfjs-dist/build/pdf.min.js        lib/
 cp node_modules/pdfjs-dist/build/pdf.worker.min.js lib/
 cp node_modules/mammoth/mammoth.browser.min.js     lib/
+cp node_modules/jszip/dist/jszip.min.js            lib/
 ```
 
 После смены версии поправьте номера в `index.html` (константа `CDN`

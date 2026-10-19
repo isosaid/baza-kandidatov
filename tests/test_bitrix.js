@@ -64,7 +64,7 @@ const DISK = {
   const ok = [];
   const check = (name, cond, extra) => { ok.push(cond); console.log(`${cond ? '✓' : '✕'} ${name}${cond ? '' : '  → ' + extra}`); };
 
-  await p.click('[data-v=bx]'); await p.waitForTimeout(200);
+  await p.click('[data-v=admin]'); await p.waitForTimeout(200);
 
   // 1. список хранилищ
   await p.click('button:has-text("Выбрать на Диске")');
@@ -88,7 +88,7 @@ const DISK = {
   check('ID папки подставлен в поле', fid === '110', `получено «${fid}»`);
 
   // 5. синхронизация
-  await p.click('button:has-text("Синхронизировать папку")');
+  await p.click('#v-admin button:has-text("Синхронизировать папку")');
   await p.waitForFunction(() => window.AVB.DATA.length >= 3, { timeout: 30000 }).catch(() => {});
   const data = await p.evaluate(() => window.AVB.DATA.map(c => ({ n: c.name, f: c.folder, s: c.source, sk: c.skills.length, exp: c.exp })));
   check('загружены только резюме, без картинки', data.length === 3, `получено ${data.length}`);
@@ -99,7 +99,7 @@ const DISK = {
   check('поля разобраны', data.every(c => c.n && c.sk > 0 && c.exp > 0), JSON.stringify(data));
 
   // 6. повторная синхронизация не создаёт дубликатов
-  await p.click('button:has-text("Синхронизировать папку")');
+  await p.click('#v-admin button:has-text("Синхронизировать папку")');
   await p.waitForTimeout(2500);
   const again = await p.evaluate(() => window.AVB.DATA.length);
   check('повторная синхронизация не дублирует', again === 3, `стало ${again}`);
