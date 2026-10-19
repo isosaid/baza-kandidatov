@@ -2283,7 +2283,7 @@ function pushHist(crit){
   LSS('avb_hist', HIST);
 }
 function renderFav(){
-  navFavCnt.textContent = FAV.length;
+  navFavCnt.textContent = FAV.reduce((a,f)=>a+f.items.length,0)||'';
   const colls = FAV.length ? FAV.map(f=>`
     <div class="panel" style="margin-bottom:14px">
       <div class="row" style="justify-content:space-between;margin-bottom:10px">
