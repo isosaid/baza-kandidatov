@@ -624,7 +624,8 @@ ru:{appName:'База кандидатов',appOrg:'ООО «Авесто Гру
  bxHook:'Входящий вебхук',bxHookHint:'Битрикс24 → Разработчикам → Другое → Входящий вебхук. Права: disk, crm.',
  bxFolder:'Папка с резюме',bxFolderHint:'Нажмите «Выбрать на Диске» и дойдите до нужной папки — ID подставится сам. Публичная ссылка вида /folder/xxxx для этого не годится, у неё нет API.',
  bxPickBtn:'Выбрать на Диске',bxLoading:'читаю Диск…',bxStorages:'Хранилища',bxMyDisk:'Мой Диск',bxCommon:'Общий диск',
- bxNoSub:'Вложенных папок нет',bxFilesHere:'Резюме прямо в этой папке',bxPickThis:'Выбрать эту папку',bxPicked:'Выбрана папка',
+ bxNoSub:'Вложенных папок нет',bxAll:'Показать все хранилища портала',bxPersonal:'личный диск',bxGroup:'диск группы',
+ bxFind:'Поиск по названию хранилища',bxTotal:'всего хранилищ',bxFilesHere:'Резюме прямо в этой папке',bxPickThis:'Выбрать эту папку',bxPicked:'Выбрана папка',
  bxTest:'Проверить связь',bxSync:'Синхронизировать папку',bxDeepLbl:'включая вложенные папки',
  bxHowTitle:'Как разместить платформу внутри портала',
  setH:'Настройки',setP:'Веса критериев, словарь навыков и управление данными.',
@@ -720,7 +721,8 @@ tj:{appName:'Пойгоҳи номзадҳо',appOrg:'ҶДММ «Авесто Г
  bxHook:'Вебхуки воридотӣ',bxHookHint:'Битрикс24 → Ба таҳиягарон → Дигар → Вебхуки воридотӣ. Ҳуқуқҳо: disk, crm.',
  bxFolder:'Ҷузвдони резюме',bxFolderHint:'«Дар Диск интихоб кардан»-ро пахш кунед ва то ҷузвдони лозимӣ равед — ID худаш гузошта мешавад. Истиноди оммавии /folder/xxxx барои ин мувофиқ нест, API надорад.',
  bxPickBtn:'Дар Диск интихоб кардан',bxLoading:'Диск хонда мешавад…',bxStorages:'Анборҳо',bxMyDisk:'Диски ман',bxCommon:'Диски умумӣ',
- bxNoSub:'Ҷузвдони дохилӣ нест',bxFilesHere:'Резюме дар худи ҳамин ҷузвдон',bxPickThis:'Ҳамин ҷузвдонро интихоб кардан',bxPicked:'Ҷузвдони интихобшуда',
+ bxNoSub:'Ҷузвдони дохилӣ нест',bxAll:'Ҳамаи анборҳои порталро нишон додан',bxPersonal:'диски шахсӣ',bxGroup:'диски гурӯҳ',
+ bxFind:'Ҷустуҷӯ аз рӯи номи анбор',bxTotal:'ҳамагӣ анбор',bxFilesHere:'Резюме дар худи ҳамин ҷузвдон',bxPickThis:'Ҳамин ҷузвдонро интихоб кардан',bxPicked:'Ҷузвдони интихобшуда',
  bxTest:'Санҷиши пайваст',bxSync:'Ҳамоҳангсозии ҷузвдон',bxDeepLbl:'бо ҷузвдонҳои дохилӣ',
  bxHowTitle:'Чӣ тавр платформаро дар дохили портал ҷойгир кардан',
  setH:'Танзимот',setP:'Вазни меъёрҳо, луғати малакаҳо ва идораи маълумот.',
@@ -1944,20 +1946,84 @@ async function bxCall(method, params){
    ID папки в интерфейсе Битрикса не показывается, поэтому находим её
    сами: сначала хранилища (Мой Диск, Общий диск, группы), затем обход
    папок кликами. Выбранная папка подставляется в поле ID. */
-let BX_CRUMB = [];
-function bxBrowse(){
-  bxBrowser.hidden = false;
-  BX_CRUMB = [];
+let BX_CRUMB = [], BX_ALL = [];
+
+/* На крупном портале хранилищ могут быть сотни (личный диск каждого
+   сотрудника плюс диски групп), а REST отдаёт их по 50 за раз.
+   Поэтому свой диск ищем фильтром по текущему пользователю,
+   а полный список — постранично и только по требованию. */
+async function bxPaged(filter, cap){
+  const out = []; let start = 0;
+  while(out.length < cap){
+    const r = await bxCall('disk.storage.getlist', filter ? {filter, start} : {start});
+    const items = (r && r.items) || r || [];
+    out.push(...items);
+    if(items.length < 50) break;
+    start += 50;
+  }
+  return out;
+}
+async function bxBrowse(){
+  bxBrowser.hidden = false; BX_CRUMB = [];
   bxBrowser.innerHTML = `<div class="panel" style="padding:16px"><p class="hint">${esc(T('bxLoading'))}</p></div>`;
-  bxCall('disk.storage.getlist',{}).then(list=>{
-    const items = (list||[]).filter(s=>s.ROOT_OBJECT_ID).map(s=>({
-      id:s.ROOT_OBJECT_ID,
-      name:s.NAME || (s.ENTITY_TYPE==='user' ? T('bxMyDisk') : T('bxCommon'))
-    }));
-    bxRender(items, null, 0);
-  }).catch(e=>{
+  try{
+    const items = [];
+    let me = null;
+    try{ me = await bxCall('user.current',{}); }catch(e){}
+    // Ответ на фильтр обязательно перепроверяем: часть порталов фильтр
+    // игнорирует и молча отдаёт первые 50 хранилищ подряд.
+    const isMine   = x => x.ENTITY_TYPE==='user'   && me && String(x.ENTITY_ID)===String(me.ID);
+    const isCommon = x => x.ENTITY_TYPE==='common';
+    async function pick(filter, test){
+      let r = [];
+      try{ r = await bxCall('disk.storage.getlist',{filter}); }catch(e){}
+      let hit = (r||[]).filter(test);
+      if(!hit.length){ hit = (await bxPaged(null, 2000)).filter(test); }
+      return hit;
+    }
+    if(me && me.ID){
+      (await pick({ENTITY_TYPE:'user', ENTITY_ID:me.ID}, isMine))
+        .forEach(x=>{ if(x.ROOT_OBJECT_ID) items.push({id:x.ROOT_OBJECT_ID, name:T('bxMyDisk')}); });
+    }
+    (await pick({ENTITY_TYPE:'common'}, isCommon))
+      .forEach(x=>{ if(x.ROOT_OBJECT_ID) items.push({id:x.ROOT_OBJECT_ID, name:x.NAME||T('bxCommon')}); });
+    if(!items.length){ return bxAllStorages(); }
+    bxRender(items, null, 0, true);
+  }catch(e){
     bxBrowser.innerHTML = `<div class="note r">${esc(T('bxFail'))} — ${esc(e.message)}<br>${esc(T('bxCors'))}</div>`;
-  });
+  }
+}
+async function bxAllStorages(){
+  bxBrowser.innerHTML = `<div class="panel" style="padding:16px"><p class="hint">${esc(T('bxLoading'))}</p></div>`;
+  try{
+    const all = await bxPaged(null, 2000);
+    BX_ALL = all.filter(x=>x.ROOT_OBJECT_ID).map(x=>({
+      id:x.ROOT_OBJECT_ID,
+      name:(x.NAME||'—') + (x.ENTITY_TYPE==='user' ? ' · '+T('bxPersonal') : (x.ENTITY_TYPE==='group' ? ' · '+T('bxGroup') : ''))
+    }));
+    bxBrowser.innerHTML = `<div class="panel" style="padding:16px">
+      <div class="row" style="margin-bottom:10px">
+        <button class="btn btn-ghost btn-sm" style="padding:2px 6px" onclick="bxBrowse()">← ${esc(T('bxStorages'))}</button>
+        <span class="hint" style="margin-left:auto">${esc(T('bxTotal'))}: <b class="num">${BX_ALL.length}</b></span>
+      </div>
+      <input class="inp" id="bxFind" placeholder="${esc(T('bxFind'))}" oninput="bxFilterSt(this.value)">
+      <div id="bxStList" style="margin-top:10px"></div></div>`;
+    bxFilterSt('');
+  }catch(e){
+    bxBrowser.innerHTML = `<div class="note r">${esc(T('bxFail'))} — ${esc(e.message)}</div>`;
+  }
+}
+function bxFilterSt(q){
+  const list = (q ? BX_ALL.filter(s=>norm(s.name).includes(norm(q))) : BX_ALL).slice(0,200);
+  bxStList.innerHTML = list.length ? list.map(f=>bxRow(f)).join('')
+    : `<p class="hint" style="padding:8px 0">${esc(T('nothing'))}</p>`;
+}
+function bxRow(f){
+  return `<div class="row" style="padding:8px 0;border-bottom:1px solid #EFEFEB;flex-wrap:nowrap">
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true" style="flex:none;color:var(--muted)"><path d="M1.8 4.2c0-.6.5-1.1 1.1-1.1h3l1.3 1.5h6c.6 0 1.1.5 1.1 1.1v6.1c0 .6-.5 1.1-1.1 1.1H2.9c-.6 0-1.1-.5-1.1-1.1V4.2Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+    <button class="btn btn-ghost btn-sm" style="padding:0;color:var(--ink);font-weight:500;text-align:left"
+      onclick="bxEnter(${jsArg(String(f.id))},${jsArg(f.name)})">${esc(f.name)}</button>
+  </div>`;
 }
 async function bxEnter(id, name){
   BX_CRUMB.push({id,name});
@@ -1980,25 +2046,21 @@ async function bxShow(id){
     bxBrowser.innerHTML = `<div class="note r">${esc(e.message)}</div>`;
   }
 }
-function bxRender(folders, currentId, files){
+function bxRender(folders, currentId, files, isRoot){
   const crumbs = BX_CRUMB.length
     ? `<button class="btn btn-ghost btn-sm" style="padding:2px 6px" onclick="bxBrowse()">${esc(T('bxStorages'))}</button>`
       + BX_CRUMB.map((c,i)=>` / <button class="btn btn-ghost btn-sm" style="padding:2px 6px" onclick="bxUp(${i})">${esc(c.name)}</button>`).join('')
     : `<span class="hint">${esc(T('bxStorages'))}</span>`;
-  const rows = folders.length
-    ? folders.map(f=>`<div class="row" style="padding:8px 0;border-bottom:1px solid #EFEFEB;flex-wrap:nowrap">
-        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true" style="flex:none;color:var(--muted)"><path d="M1.8 4.2c0-.6.5-1.1 1.1-1.1h3l1.3 1.5h6c.6 0 1.1.5 1.1 1.1v6.1c0 .6-.5 1.1-1.1 1.1H2.9c-.6 0-1.1-.5-1.1-1.1V4.2Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
-        <button class="btn btn-ghost btn-sm" style="padding:0;color:var(--ink);font-weight:500"
-          onclick="bxEnter(${jsArg(String(f.id))},${jsArg(f.name)})">${esc(f.name)}</button>
-      </div>`).join('')
+  const rows = folders.length ? folders.map(bxRow).join('')
     : `<p class="hint" style="padding:8px 0">${esc(T('bxNoSub'))}</p>`;
+  const all = isRoot ? `<button class="btn btn-ghost btn-sm" style="margin-top:10px;padding-left:0" onclick="bxAllStorages()">${esc(T('bxAll'))}</button>` : '';
   const pick = currentId!==null && currentId!==undefined
     ? `<div class="row" style="margin-top:14px;justify-content:space-between">
          <span class="hint">${esc(T('bxFilesHere'))}: <b class="num">${files||0}</b></span>
          <button class="btn btn-primary btn-sm" onclick="bxPick(${jsArg(String(currentId))})">${esc(T('bxPickThis'))}</button>
        </div>` : '';
   bxBrowser.innerHTML = `<div class="panel" style="padding:16px">
-    <div style="font-size:12.5px;margin-bottom:10px">${crumbs}</div>${rows}${pick}</div>`;
+    <div style="font-size:12.5px;margin-bottom:10px">${crumbs}</div>${rows}${all}${pick}</div>`;
 }
 function bxPick(id){
   bxFolder.value = id;

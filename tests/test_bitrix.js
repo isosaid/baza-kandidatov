@@ -12,8 +12,8 @@ const RESUME = (fio, city, exp, skills) => [
 
 const DISK = {
   'disk.storage.getlist': [
-    { ID: '1', NAME: 'Мой Диск', ENTITY_TYPE: 'user', ROOT_OBJECT_ID: '100' },
-    { ID: '2', NAME: 'Общий диск', ENTITY_TYPE: 'common', ROOT_OBJECT_ID: '200' },
+    { ID: '1', NAME: 'Тест Тестов', ENTITY_TYPE: 'user', ENTITY_ID: '1', ROOT_OBJECT_ID: '100' },
+    { ID: '2', NAME: 'Общий диск', ENTITY_TYPE: 'common', ENTITY_ID: 'shared', ROOT_OBJECT_ID: '200' },
   ],
   '100': [
     { ID: '110', NAME: 'Резюме', TYPE: 'folder' },
@@ -50,7 +50,11 @@ const DISK = {
     window.BX24 = {
       callMethod(method, params, cb) {
         let data = [];
-        if (method === 'disk.storage.getlist') data = disk['disk.storage.getlist'];
+        if (method === 'disk.storage.getlist') {
+          data = disk['disk.storage.getlist'];
+          if (params && params.filter) data = data.filter(x => Object.keys(params.filter)
+            .every(k => String(x[k]) === String(params.filter[k])));
+        }
         else if (method === 'disk.folder.getchildren') {
           data = (disk[String(params.id)] || []).map(it => it.RESUME
             ? { ...it, DOWNLOAD_URL: 'data:text/plain;charset=utf-8,' + encodeURIComponent(mk(...it.RESUME)), DETAIL_URL: 'https://portal/x/' + it.ID }
