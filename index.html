@@ -1401,6 +1401,27 @@ function dbAll(){
 function dbClear(){
   return new Promise(res=>{ const tx=DB.transaction('c','readwrite'); tx.objectStore('c').clear(); tx.oncomplete=()=>res(); });
 }
+function dbGetOne(id){
+  return new Promise((res,rej)=>{
+    const tx=DB.transaction('c','readonly');
+    const req=tx.objectStore('c').get(id);
+    req.onsuccess=e=>res(e.target.result);
+    req.onerror=e=>rej(e);
+  });
+}
+async function downloadResume(id, filename){
+  try{
+    const rec = await dbGetOne(id);
+    if(!rec){ toast('Файл не найден в базе. Попробуйте загрузить резюме заново.'); return; }
+    if(!rec.fileData){ toast('Оригинал файла не сохранён (загружен до обновления). Загрузите резюме заново для скачивания.'); return; }
+    const a = document.createElement('a');
+    a.href = rec.fileData;
+    a.download = filename || rec.file || 'resume';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  } catch(e){
+    toast('Ошибка скачивания: ' + e.message);
+  }
+}
 
 /* ============================================================
    ЧТЕНИЕ ФАЙЛОВ
@@ -1498,8 +1519,10 @@ async function ingestFiles(input){
     const id = 'f:'+folder+'/'+f.name+':'+f.size;
     if(existing.has(id)){ dupes++; setProg((i+1)/list.length); continue; }
     try{
-      const txt = await readFileText(f);
-      const c = parseResume(txt,{id,file:f.name,folder,size:f.size,source:'local',mtime:f.lastModified||null});
+      const buf = await f.arrayBuffer();
+      const txt = await readFileText(new File([buf], f.name, {lastModified: f.lastModified||Date.now()}));
+      const b64 = await new Promise(r=>{ const rd=new FileReader(); rd.onload=e=>r(e.target.result); rd.readAsDataURL(new Blob([buf])); });
+      const c = parseResume(txt,{id,file:f.name,folder,size:f.size,source:'local',mtime:f.lastModified||null,fileData:b64,fileMime:f.type||'application/octet-stream'});
       fresh.push(c); existing.add(id);
       log((c.scan?'⚠ ':'✓ ')+esc(f.name)+(c.scan?' — '+T('noLayer'):' — '+(c.name||T('noName'))+(c.skills.length?' · '+T('skCnt')+': '+c.skills.length:'')), c.scan?'w':'ok');
     }catch(e){ log('✕ '+esc(f.name)+' — '+esc(e.message||'ошибка чтения'),'e'); }
@@ -1823,6 +1846,7 @@ function renderDetail(){
     </div>
     <div class="row">
       ${c.url?`<a class="btn btn-line" href="${esc(c.url)}" target="_blank" rel="noopener">${esc(T('openFile'))}</a>`:''}
+      ${c.source==='local'?`<button class="btn btn-line" onclick="downloadResume('${esc(c.id)}','${esc(c.file)}')">⬇ Скачать резюме</button>`:''}
       <button class="btn btn-primary" id="btnSaveCard" onclick="saveCard()">${esc(T('save'))}</button>
     </div>
   </div>
