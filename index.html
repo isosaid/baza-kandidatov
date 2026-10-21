@@ -257,7 +257,7 @@ td .mut{color:var(--muted);font-size:12px}
     </button>
     <button class="nav-item" data-v="fav">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 13.2 3.6 15l.9-4.8L1 6.9l4.9-.6L8 2l2.1 4.3 4.9.6-3.5 3.3.9 4.8Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
-      <span data-i="navFav">Избранное</span><span class="tag" id="navFavCnt">0</span>
+      <span data-i="navFav">Избранное</span><span class="tag" id="navFavCnt" style="display:none"></span>
     </button>
     <button class="nav-item" data-v="load">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 11V3M5 6l3-3 3 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.8 10.5v1.9c0 .6.5 1.1 1.1 1.1h8.2c.6 0 1.1-.5 1.1-1.1v-1.9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
@@ -2315,7 +2315,9 @@ function pushHist(crit){
   LSS('avb_hist', HIST);
 }
 function renderFav(){
-  navFavCnt.textContent = FAV.reduce((a,f)=>a+f.items.length,0)||'';
+  const favTotal = FAV.reduce((a,f)=>a+f.items.length,0);
+  navFavCnt.textContent = favTotal||'';
+  navFavCnt.style.display = favTotal ? '' : 'none';
   const colls = FAV.length ? FAV.map(f=>`
     <div class="panel" style="margin-bottom:14px">
       <div class="row" style="justify-content:space-between;margin-bottom:10px">
@@ -2437,7 +2439,29 @@ async function setVerdict(id, v){
   if(c.verdict==='unfit') c.status='reject';
   await dbPut([c]); refresh();
   if(OPEN_ID===id) renderDetail(); else if(LAST_SHORT.length) runMatch();
-  toast(T(c.verdict==='fit'?'verdictFit':c.verdict==='unfit'?'verdictUnfit':'saved'));
+  // При «Подходит» — сразу добавить в папку Избранного по должности
+  if(c.verdict==='fit'){
+    const prof = (c.position||c.folder||'').trim();
+    if(prof){
+      const existing = FAV.find(f=>f.name===prof);
+      if(existing){
+        if(!existing.items.find(i=>i.id===c.id)){
+          existing.items.push({id:c.id, name:c.name||c.file, score:null});
+          existing.date=Date.now();
+          LSS('avb_fav',FAV); renderFav();
+        }
+      } else {
+        FAV.unshift({id:'f'+Date.now(), name:prof, date:Date.now(), crit:null,
+          items:[{id:c.id, name:c.name||c.file, score:null}]});
+        LSS('avb_fav',FAV); renderFav();
+      }
+      toast('✓ ' + (c.name||c.file) + ' → 📁 ' + prof);
+    } else {
+      toast(T('verdictFit'));
+    }
+  } else {
+    toast(T(c.verdict==='unfit'?'verdictUnfit':'saved'));
+  }
 }
 
 /* ---------- администрирование ---------- */
