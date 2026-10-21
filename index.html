@@ -2249,20 +2249,21 @@ const fmtDT   = t => t ? new Date(t).toLocaleString(LANG==='tj'?'tg-TJ':'ru-RU',
 /* ---------- избранное ---------- */
 function saveFav(){
   if(!LAST_SHORT.length){ toast(T('posNoShort')); return; }
-  // Блокируем сохранение без должности — папка «Шорт-лист» не имеет смысла
   const prof = cPos.value.trim();
   if(!prof){ toast('Укажите должность в поле «Должность» перед сохранением'); return; }
-  // Если папка с таким названием уже есть — добавляем кандидатов в неё
+  // Только кандидаты с вердиктом «Подходит»
+  const fits = LAST_SHORT.filter(x => x.c.verdict === 'fit');
+  if(!fits.length){ toast('Отметьте кандидатов как «Подходит» (зелёная кнопка) перед сохранением в Избранное'); return; }
   const existing = FAV.find(f => f.name === prof);
   if(existing){
     const existIds = new Set(existing.items.map(i=>i.id));
-    LAST_SHORT.forEach(x=>{ if(!existIds.has(x.c.id)) existing.items.push({id:x.c.id, name:x.c.name||x.c.file, score:x.score}); });
+    fits.forEach(x=>{ if(!existIds.has(x.c.id)) existing.items.push({id:x.c.id, name:x.c.name||x.c.file, score:x.score}); });
     existing.date = Date.now();
     LSS('avb_fav', FAV); renderFav();
     toast('📁 ' + prof + ': ' + T('saved'));
   } else {
     FAV.unshift({ id:'f'+Date.now(), name:prof, date:Date.now(), crit:currentCrit(),
-      items: LAST_SHORT.map(x=>({id:x.c.id, name:x.c.name||x.c.file, score:x.score})) });
+      items: fits.map(x=>({id:x.c.id, name:x.c.name||x.c.file, score:x.score})) });
     LSS('avb_fav', FAV); renderFav();
     toast('📁 ' + prof + ': ' + T('saved'));
   }
