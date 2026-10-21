@@ -537,6 +537,25 @@ td .mut{color:var(--muted);font-size:12px}
       <button class="btn btn-line btn-sm" style="margin-top:12px" onclick="saveDict()"><span data-i="save">Сохранить</span></button>
     </div>
 
+    <div class="panel" style="margin-bottom:18px">
+      <h3 style="font-size:15px;margin-bottom:4px">☁ Google Drive — общая база</h3>
+      <p class="hint" style="margin-bottom:12px">Рекрутер загружает резюме → сохраняет в Drive. Руководители открывают платформу → видят ту же базу.</p>
+      <div id="gdStatus" style="margin-bottom:10px"></div>
+      <div class="row" style="flex-wrap:wrap;gap:8px">
+        <button class="btn btn-line btn-sm" id="gdSignIn" onclick="gdSignIn()">🔑 Войти через Google</button>
+        <button class="btn btn-line btn-sm" id="gdSignOut" onclick="gdSignOut()" style="display:none">Выйти из Google</button>
+        <button class="btn btn-primary btn-sm" id="gdSave" onclick="gdSaveDb()" style="display:none">⬆ Сохранить базу в Drive</button>
+        <button class="btn btn-line btn-sm" id="gdLoad" onclick="gdLoadDb()" style="display:none">⬇ Загрузить базу из Drive</button>
+      </div>
+      <div style="margin-top:12px">
+        <label class="hint" style="display:block;margin-bottom:4px">Или введите ID файла (для просмотра без входа):</label>
+        <div class="row" style="gap:8px">
+          <input class="inp" id="gdFileId" style="flex:1;font-size:12px;font-family:var(--mono)" placeholder="1aBcD...xyz (из ссылки Drive)" value="${localStorage.getItem('avb_gd_file')||''}">
+          <button class="btn btn-line btn-sm" onclick="gdLoadByFileId()">Загрузить</button>
+        </div>
+      </div>
+    </div>
+
     <div class="panel">
       <h3 style="font-size:15px;margin-bottom:12px" data-i="setData">Данные</h3>
       <div class="row">
@@ -844,7 +863,7 @@ function setLang(l){
   qFree.placeholder = l==='tj'
     ? 'Сарҳисобдор лозим аст. Таҷриба аз 5 сол, ҳатман 1С ва МСФО, маълумоти олӣ, Душанбе.'
     : 'Нужен главный бухгалтер. Опыт от 5 лет, обязательно 1С и МСФО, высшее образование, Душанбе.';
-  crumb(); fillSelects(); renderSk(); renderWeights(); renderBase(); renderStats(); renderBxMode(); renderBxHow(); renderPositions(); renderFav(); renderAdmin(); renderMe();
+  crumb(); fillSelects(); renderSk(); renderWeights(); renderBase(); renderStats(); renderBxMode(); renderBxHow(); renderPositions(); renderFav(); renderAdmin(); renderMe(); gdCheckToken(); gdUpdateButtons();
   if(LAST_SHORT.length) runMatch();
   if(OPEN_ID) renderDetail();
 }
@@ -2220,6 +2239,149 @@ function exportCsv(){
   dl('kandidaty_'+new Date().toISOString().slice(0,10)+'.csv', csv, 'text/csv;charset=utf-8');
 }
 function exportJson(){ dl('baza_kandidatov_'+new Date().toISOString().slice(0,10)+'.json', JSON.stringify(DATA), 'application/json'); }
+
+/* ============================================================
+   GOOGLE DRIVE СИНХРОНИЗАЦИЯ
+   Хранит базу кандидатов в файле baza_kandidatov.json на Google Drive.
+   Рекрутер входит через OAuth и сохраняет/загружает.
+   Руководители могут загрузить по ID файла (публичный доступ).
+   ============================================================ */
+const GD_CLIENT_ID = ''; // ← вставить Client ID из Google Cloud Console
+const GD_SCOPES = 'https://www.googleapis.com/auth/drive.file';
+const GD_FILE_NAME = 'baza_kandidatov_avesto.json';
+let GD_TOKEN = null;
+let GD_FILE_ID = localStorage.getItem('avb_gd_file') || null;
+
+function gdSetStatus(msg, type){
+  const el = document.getElementById('gdStatus');
+  if(!el) return;
+  el.innerHTML = `<div class="note${type==='ok'?' ok':type==='err'?' w':''}" style="font-size:13px">${msg}</div>`;
+}
+function gdUpdateButtons(){
+  const signIn = document.getElementById('gdSignIn');
+  const signOut = document.getElementById('gdSignOut');
+  const save = document.getElementById('gdSave');
+  const load = document.getElementById('gdLoad');
+  if(!signIn) return;
+  if(GD_TOKEN){
+    signIn.style.display='none';
+    signOut.style.display='';
+    save.style.display='';
+    load.style.display='';
+  } else {
+    signIn.style.display='';
+    signOut.style.display='none';
+    save.style.display='none';
+    load.style.display='none';
+  }
+  const fi = document.getElementById('gdFileId');
+  if(fi) fi.value = GD_FILE_ID||'';
+}
+
+function gdSignIn(){
+  if(!GD_CLIENT_ID){
+    gdSetStatus('⚠ Google Client ID не настроен. Обратитесь к администратору для настройки.','err');
+    return;
+  }
+  const params = new URLSearchParams({
+    client_id: GD_CLIENT_ID,
+    redirect_uri: location.origin + location.pathname,
+    response_type: 'token',
+    scope: GD_SCOPES,
+    include_granted_scopes: 'true',
+    state: 'gd_auth'
+  });
+  localStorage.setItem('avb_gd_return', location.href);
+  location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + params;
+}
+function gdSignOut(){
+  GD_TOKEN = null;
+  gdSetStatus('Вы вышли из Google аккаунта.','');
+  gdUpdateButtons();
+}
+function gdCheckToken(){
+  // Проверяем hash после OAuth redirect
+  const hash = new URLSearchParams(location.hash.replace('#',''));
+  if(hash.get('access_token') && hash.get('state')==='gd_auth'){
+    GD_TOKEN = hash.get('access_token');
+    history.replaceState(null,'',location.pathname);
+    gdSetStatus('✓ Вы вошли в Google. Теперь можно сохранить или загрузить базу.','ok');
+    gdUpdateButtons();
+  }
+}
+async function gdSaveDb(){
+  if(!GD_TOKEN){ toast('Сначала войдите в Google'); return; }
+  gdSetStatus('⏳ Сохранение базы в Google Drive…','');
+  try{
+    // Экспортируем данные без бинарников (fileData слишком большой)
+    const exportData = DATA.map(c=>{ const {fileData,fileMime,...rest}=c; return rest; });
+    const body = JSON.stringify({
+      exported: new Date().toISOString(),
+      count: exportData.length,
+      fav: FAV,
+      candidates: exportData
+    });
+    const blob = new Blob([body],{type:'application/json'});
+    let r;
+    if(GD_FILE_ID){
+      // Обновляем существующий файл
+      r = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${GD_FILE_ID}?uploadType=media`,{
+        method:'PATCH', headers:{'Authorization':'Bearer '+GD_TOKEN,'Content-Type':'application/json'}, body: blob
+      });
+    } else {
+      // Создаём новый файл
+      const meta = JSON.stringify({name:GD_FILE_NAME, mimeType:'application/json'});
+      const form = new FormData();
+      form.append('metadata', new Blob([meta],{type:'application/json'}));
+      form.append('file', blob);
+      r = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',{
+        method:'POST', headers:{'Authorization':'Bearer '+GD_TOKEN}, body: form
+      });
+    }
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const j = await r.json();
+    GD_FILE_ID = j.id;
+    localStorage.setItem('avb_gd_file', GD_FILE_ID);
+    const fi = document.getElementById('gdFileId');
+    if(fi) fi.value = GD_FILE_ID;
+    gdSetStatus(`✓ База сохранена (${exportData.length} кандидатов). ID файла: <b>${GD_FILE_ID}</b><br><span style="font-size:11px;color:var(--muted)">Поделитесь этим ID с коллегами, чтобы они могли загрузить базу.</span>`,'ok');
+    toast('☁ База сохранена в Google Drive');
+  }catch(e){
+    gdSetStatus('✕ Ошибка сохранения: '+e.message,'err');
+  }
+}
+async function gdLoadDb(){
+  if(!GD_TOKEN){ toast('Сначала войдите в Google'); return; }
+  if(!GD_FILE_ID){ toast('Сохраните базу сначала, чтобы получить ID файла'); return; }
+  await gdLoadByFileId();
+}
+async function gdLoadByFileId(){
+  const fi = document.getElementById('gdFileId');
+  const fid = (fi?.value||'').trim() || GD_FILE_ID;
+  if(!fid){ toast('Введите ID файла'); return; }
+  GD_FILE_ID = fid;
+  localStorage.setItem('avb_gd_file', fid);
+  gdSetStatus('⏳ Загрузка базы из Google Drive…','');
+  try{
+    const headers = {};
+    if(GD_TOKEN) headers['Authorization'] = 'Bearer '+GD_TOKEN;
+    const r = await fetch(`https://www.googleapis.com/drive/v3/files/${fid}?alt=media`, {headers});
+    if(r.status===401||r.status===403) throw new Error('Нет доступа к файлу. Войдите в Google или попросите рекрутера открыть доступ к файлу.');
+    if(!r.ok) throw new Error('HTTP '+r.status+'. Проверьте правильность ID файла.');
+    const j = await r.json();
+    if(!j.candidates || !Array.isArray(j.candidates)) throw new Error('Неверный формат файла.');
+    // Загружаем данные в IndexedDB
+    await dbPut(j.candidates);
+    DATA = await dbAll();
+    if(j.fav) { FAV = j.fav; LSS('avb_fav', FAV); }
+    refresh(); renderFav();
+    gdSetStatus(`✓ Загружено ${j.candidates.length} кандидатов (обновлено: ${j.exported ? new Date(j.exported).toLocaleString('ru') : '—'}).`,'ok');
+    toast(`☁ Загружено ${j.candidates.length} кандидатов из Drive`);
+  }catch(e){
+    gdSetStatus('✕ '+e.message,'err');
+  }
+}
+
 async function wipe(){
   if(!confirm(T('wipeAsk'))) return;
   await dbClear(); DATA=[]; OPEN_ID=null; LAST_SHORT=[]; LAST_CRIT=null; matchOut.innerHTML='';
