@@ -1852,7 +1852,6 @@ function renderDetail(){
     <div class="row">
       ${c.url?`<a class="btn btn-line" href="${esc(c.url)}" target="_blank" rel="noopener">${esc(T('openFile'))}</a>`:''}
       ${c.source==='local'?`<button class="btn btn-line" onclick="downloadResume(${jsArg(c.id)},${jsArg(c.file||c.id)})">⬇ Скачать резюме</button>`:''}
-      <button class="btn btn-primary" id="btnSaveCard" onclick="saveCard()">${esc(T('save'))}</button>
     </div>
   </div>
 
