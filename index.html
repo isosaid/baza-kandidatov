@@ -1237,7 +1237,9 @@ function parseResume(text, meta){
     status: 'new',
     verdict: null,
     added: meta.added || Date.now(),
-    applied: meta.mtime || null
+    applied: meta.mtime || null,
+    fileData: meta.fileData || null,
+    fileMime: meta.fileMime || null
   };
   out.gender = pickGender(out.name);
   out.category = pickCategory(raw, out.position, out.skills);
