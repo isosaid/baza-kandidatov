@@ -2118,10 +2118,23 @@ async function bxCall(method, params){
   if(!hook) throw new Error(T('bxNoHook'));
   const bad = hookProblem(hook); if(bad) throw new Error(bad);
   if(!hook.endsWith('/')) hook += '/';
-  const r = await fetch(hook+method+'.json', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(params||{})});
-  const j = await r.json();
-  if(j.error){ const e = new Error(j.error_description||j.error); e.code = j.error; throw e; }
-  return j.result;
+  for(let attempt=0;;attempt++){
+    const ctl = new AbortController(); const tm = setTimeout(()=>ctl.abort(), 30000);
+    let j;
+    try{
+      const r = await fetch(hook+method+'.json', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(params||{}),signal:ctl.signal});
+      j = await r.json();
+    }catch(e){
+      clearTimeout(tm);
+      if(e.name==='AbortError') throw new Error('Битрикс24 не ответил за 30 секунд ('+method+')');
+      throw e;
+    }
+    clearTimeout(tm);
+    // Битрикс24 ограничивает частоту запросов — ждём и повторяем
+    if(j.error==='QUERY_LIMIT_EXCEEDED' && attempt<6){ await new Promise(r=>setTimeout(r, 700*(attempt+1))); continue; }
+    if(j.error){ const e = new Error(j.error_description||j.error); e.code = j.error; throw e; }
+    return j.result;
+  }
 }
 /* ---------- обозреватель Диска ----------
    ID папки в интерфейсе Битрикса не показывается, поэтому находим её
@@ -2134,12 +2147,13 @@ let BX_CRUMB = [], BX_ALL = [];
    Поэтому свой диск ищем фильтром по текущему пользователю,
    а полный список — постранично и только по требованию. */
 async function bxPaged(filter, cap){
-  const out = []; let start = 0;
+  const out = []; let start = 0; const seen = new Set();
   while(out.length < cap){
     const r = await bxCall('disk.storage.getlist', filter ? {filter, start} : {start});
     const items = (r && r.items) || r || [];
-    out.push(...items);
-    if(items.length < 50) break;
+    const fresh = items.filter(x=>{ const k=String(x.ID||x.ROOT_OBJECT_ID); if(seen.has(k)) return false; seen.add(k); return true; });
+    out.push(...fresh);
+    if(items.length < 50 || !fresh.length) break;
     start += 50;
   }
   return out;
@@ -2169,19 +2183,26 @@ async function bxBrowse(){
     (await pick({ENTITY_TYPE:'common'}, isCommon))
       .forEach(x=>{ if(x.ROOT_OBJECT_ID) items.push({id:x.ROOT_OBJECT_ID, name:x.NAME||T('bxCommon')}); });
     if(!items.length){ return bxAllStorages(); }
-    bxRender(items, null, 0, true);
+    bxRender(bxUniqRows(items), null, 0, true);
   }catch(e){
     bxBrowser.innerHTML = `<div class="note r">${esc(T('bxFail'))} — ${esc(e.message)}<br>${esc(T('bxCors'))}</div>`;
   }
+}
+function bxUniqRows(rows){
+  const byId = new Map(); rows.forEach(r=>{ if(!byId.has(String(r.id))) byId.set(String(r.id), {...r}); });
+  const list = [...byId.values()];
+  const cnt = {}; list.forEach(r=>cnt[r.name]=(cnt[r.name]||0)+1);
+  list.forEach(r=>{ if(cnt[r.name]>1) r.name += ' (ID '+r.id+')'; });
+  return list;
 }
 async function bxAllStorages(){
   bxBrowser.innerHTML = `<div class="panel" style="padding:16px"><p class="hint">${esc(T('bxLoading'))}</p></div>`;
   try{
     const all = await bxPaged(null, 2000);
-    BX_ALL = all.filter(x=>x.ROOT_OBJECT_ID).map(x=>({
+    BX_ALL = bxUniqRows(all.filter(x=>x.ROOT_OBJECT_ID).map(x=>({
       id:x.ROOT_OBJECT_ID,
       name:(x.NAME||'—') + (x.ENTITY_TYPE==='user' ? ' · '+T('bxPersonal') : (x.ENTITY_TYPE==='group' ? ' · '+T('bxGroup') : ''))
-    }));
+    })));
     bxBrowser.innerHTML = `<div class="panel" style="padding:16px">
       <div class="row" style="margin-bottom:10px">
         <button class="btn btn-ghost btn-sm" style="padding:2px 6px" onclick="bxBrowse()">← ${esc(T('bxStorages'))}</button>
@@ -2215,11 +2236,21 @@ async function bxUp(i){
   if(!BX_CRUMB.length) return bxBrowse();
   await bxShow(BX_CRUMB[BX_CRUMB.length-1].id);
 }
+async function bxChildren(id){
+  const out = []; const seen = new Set();
+  for(let start=0; start<=5000; start+=50){
+    const r = await bxCall('disk.folder.getchildren',{id, start});
+    const items = (r && r.items) || r || [];
+    const fresh = items.filter(i=>!seen.has(String(i.ID)) && seen.add(String(i.ID)));
+    out.push(...fresh);
+    if(items.length<50 || !fresh.length) break;
+  }
+  return out;
+}
 async function bxShow(id){
   bxBrowser.innerHTML = `<div class="panel" style="padding:16px"><p class="hint">${esc(T('bxLoading'))}</p></div>`;
   try{
-    const r = await bxCall('disk.folder.getchildren',{id});
-    const items = (r && r.items) || r || [];
+    const items = await bxChildren(id);
     const folders = items.filter(i=>i.TYPE==='folder').map(i=>({id:i.ID,name:i.NAME}));
     const files = items.filter(i=>i.TYPE!=='folder' && /\.(pdf|docx|doc|txt|rtf)$/i.test(i.NAME)).length;
     bxRender(folders, id, files);
@@ -2304,21 +2335,23 @@ async function bxSync(){
   localStorage.setItem('avb_folder',root);
   try{
     const files = [];
+    let nFolders = 0;
+    const live = document.createElement('div'); live.className='w';
     async function walk(id, path){
-      let start=0;
-      while(true){
-        const r = await bxCall('disk.folder.getchildren',{id, start});
-        const items = (r && r.items) || r || [];
-        for(const it of items){
-          if(it.TYPE==='folder'){ if(bxDeep.checked) await walk(it.ID, [...path, it.NAME]); }
-          else if(/\.(pdf|docx|doc|txt|rtf)$/i.test(it.NAME)) files.push({...it, folder:vacancyFolder(path)});
-        }
-        if(items.length<50) break; start+=50;
-        if(start>2000) break;
+      nFolders++;
+      live.textContent = '… просмотрено папок: '+nFolders+', найдено резюме: '+files.length+(path.length?' — сейчас: '+path.join(' / '):'');
+      const items = await bxChildren(id);
+      for(const it of items){
+        if(it.TYPE==='folder'){ if(bxDeep.checked) await walk(it.ID, [...path, it.NAME]); }
+        else if(/\.(pdf|docx|doc|txt|rtf)$/i.test(it.NAME)) files.push({...it, folder:vacancyFolder(path)});
       }
     }
     bxLog('… '+esc(T('bxRead')));
+    document.getElementById('bxLog').appendChild(live);
+    bxProg.firstElementChild.style.width='3%';
     await walk(root, []);
+    live.remove();
+    bxLog('✓ просмотрено папок: '+nFolders,'ok');
     bxLog('✓ '+esc(T('bxFound'))+': '+files.length,'ok');
     const existing = new Set(DATA.map(c=>c.id));
     const fresh=[]; let errCount=0;
@@ -2339,7 +2372,10 @@ async function bxSync(){
         continue;
       }
       try{
-        const resp = await fetch(f.DOWNLOAD_URL || f.DETAIL_URL);
+        let resp;
+        try{ resp = await fetch(f.DOWNLOAD_URL || f.DETAIL_URL); }
+        catch(e){ throw new Error('файл не скачался — браузер не получил доступ к ссылке скачивания Битрикс24'); }
+        if(!resp.ok) throw new Error('файл не скачался — Битрикс24 ответил HTTP '+resp.status);
         const blob = await resp.blob();
         const txt = await readFileText(new File([blob], f.NAME));
         const c = parseResume(txt,{id,file:f.NAME,folder:f.folder,size:blob.size,source:'bitrix',url:f.DETAIL_URL,
