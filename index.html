@@ -2297,7 +2297,10 @@ async function bxTest(){
 async function bxSync(){
   document.getElementById('bxLog').innerHTML=''; bxProg.style.display='block'; bxProg.firstElementChild.style.width='0%';
   const root = bxFolder.value.trim();
-  if(!root){ bxLog('✕ '+esc(T('bxNoFolder')),'e'); bxProg.style.display='none'; return; }
+  if(!root){
+    bxLog('⚠ Сначала выберите папку с резюме: откройте нужную папку в списке ниже и нажмите «Выбрать эту папку».','w');
+    bxProg.style.display='none'; bxBrowse(); return;
+  }
   localStorage.setItem('avb_folder',root);
   try{
     const files = [];
