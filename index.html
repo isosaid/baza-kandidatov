@@ -2325,6 +2325,33 @@ async function bxTest(){
     localStorage.setItem('avb_hook', bxHook.value.trim());
   }catch(e){ bxLog('✕ '+esc(T('bxFail'))+' — '+esc(e.message),'e'); bxLog(esc(T('bxCors')),'w'); }
 }
+/* Скачать файл с Диска Битрикс24.
+   Ссылка бывает относительной или с http:// — со страницы https:// браузер её блокирует,
+   поэтому приводим к https и адресу портала из вебхука. */
+function bxFileUrl(f){
+  let raw = f.DOWNLOAD_URL || f.DETAIL_URL || '';
+  let base = location.href;
+  try{ base = new URL(bxHook.value.trim()).origin + '/'; }catch(e){}
+  let u; try{ u = new URL(raw, base); }catch(e){ return {url:raw, wasHttp:false, where:'—'}; }
+  const wasHttp = u.protocol==='http:' && location.protocol==='https:';
+  if(wasHttp) u.protocol = 'https:';
+  // в журнал — только схема, сервер и первый сегмент пути, без ключей и токенов
+  const where = (wasHttp?'http':'https')+'://'+u.host+'/'+(u.pathname.split('/')[1]||'')+'/…';
+  return {url:u.href, wasHttp, where};
+}
+async function bxFetchFile(f){
+  const {url, wasHttp, where} = bxFileUrl(f);
+  let resp;
+  try{ resp = await fetch(url); }
+  catch(e){
+    const err = new Error(wasHttp
+      ? 'файл не скачался: Битрикс24 даёт ссылку через http:// ('+where+'), а по https:// портал файл не отдаёт'
+      : 'файл не скачался: сервер '+where+' не разрешает скачивать файлы с другого сайта (CORS)');
+    err.kind = 'net'; err.where = where; err.wasHttp = wasHttp; throw err;
+  }
+  if(!resp.ok){ const err = new Error('файл не скачался: Битрикс24 ответил HTTP '+resp.status); err.kind='http'; throw err; }
+  return resp.blob();
+}
 async function bxSync(){
   document.getElementById('bxLog').innerHTML=''; bxProg.style.display='block'; bxProg.firstElementChild.style.width='0%';
   const root = bxFolder.value.trim();
@@ -2354,7 +2381,7 @@ async function bxSync(){
     bxLog('✓ просмотрено папок: '+nFolders,'ok');
     bxLog('✓ '+esc(T('bxFound'))+': '+files.length,'ok');
     const existing = new Set(DATA.map(c=>c.id));
-    const fresh=[]; let errCount=0;
+    const fresh=[]; let errCount=0, netFails=0, okDownloads=0, stopped=null;
     for(let i=0;i<files.length;i++){
       const f = files[i];
       const id = 'bx:'+f.ID;
@@ -2365,25 +2392,33 @@ async function bxSync(){
         if(old && f.folder && old.folder!==f.folder){ old.folder = f.folder; ch = true; }
         if(old && !old.fileData && !old.gdFileId){
           // раньше из Битрикс сохранялся только текст — докачиваем сам файл для Google Drive
-          try{ const rb = await (await fetch(f.DOWNLOAD_URL || f.DETAIL_URL)).blob();
+          try{ const rb = await bxFetchFile(f);
                old.fileData = await blobToDataUrl(rb); old.fileMime = rb.type || mimeByName(f.NAME); ch = true; }catch(e){}
         }
         if(ch) await dbPut([old]);
         continue;
       }
       try{
-        let resp;
-        try{ resp = await fetch(f.DOWNLOAD_URL || f.DETAIL_URL); }
-        catch(e){ throw new Error('файл не скачался — браузер не получил доступ к ссылке скачивания Битрикс24'); }
-        if(!resp.ok) throw new Error('файл не скачался — Битрикс24 ответил HTTP '+resp.status);
-        const blob = await resp.blob();
+        const blob = await bxFetchFile(f); okDownloads++;
         const txt = await readFileText(new File([blob], f.NAME));
         const c = parseResume(txt,{id,file:f.NAME,folder:f.folder,size:blob.size,source:'bitrix',url:f.DETAIL_URL,
           mtime:(f.UPDATE_TIME||f.CREATE_TIME)?Date.parse(f.UPDATE_TIME||f.CREATE_TIME)||null:null,
           fileData: await blobToDataUrl(blob), fileMime: blob.type || mimeByName(f.NAME)});
         fresh.push(c); existing.add(id);
         bxLog((c.scan?'⚠ ':'✓ ')+esc(f.NAME)+(c.scan?' — '+esc(T('noLayer')):''), c.scan?'w':'ok');
-      }catch(e){ errCount++; bxLog('✕ '+esc(f.NAME)+' — '+esc(e.message),'e'); }
+      }catch(e){
+        errCount++; bxLog('✕ '+esc(f.NAME)+' — '+esc(e.message),'e');
+        // если ни один файл не скачивается — дальше смысла нет, это настройка сервера
+        if(e.kind==='net'){ netFails++; if(netFails>=3 && !okDownloads){ stopped = e; break; } }
+      }
+    }
+    if(stopped){
+      bxLog('■ Остановлено: первые '+netFails+' файла не скачались по одной и той же причине, остальные '+(files.length-netFails)+' не пробуем.','e');
+      bxLog(stopped.wasHttp
+        ? 'Причина: портал отдаёт ссылки скачивания через http://. Попросите администратора crm.avesto.tj включить https для скачивания файлов Диска.'
+        : 'Причина: сервер crm.avesto.tj не разрешает браузеру скачивать файлы Диска с сайта платформы (isosaid.github.io). Список папок при этом читается — запрещено только скачивание. '
+          + 'Решение 1: администратор сервера разрешает CORS для https://isosaid.github.io на ответах скачивания файлов Диска (включая переадресации). '
+          + 'Решение 2: разместить платформу внутри портала как локальное приложение — тогда она открывается с того же адреса, что и Битрикс24, и запрет не действует.','w');
     }
     if(fresh.length) await dbPut(fresh);
     DATA = await dbAll(); refresh(); renderFav();
