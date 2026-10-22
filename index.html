@@ -474,6 +474,7 @@ td .mut{color:var(--muted);font-size:12px}
           <input class="inp" id="bxFolder" placeholder="ID папки" style="max-width:150px">
           <button class="btn btn-line btn-sm" onclick="bxBrowse()" style="white-space:nowrap"><span data-i="bxPickBtn">Выбрать на Диске</span></button>
         </div>
+        <div id="bxFolderPath" style="margin-top:6px;font-size:12.5px"></div>
         <div class="hint" style="margin-top:6px" data-i="bxFolderHint">Нажмите «Выбрать на Диске» и дойдите до нужной папки — ID подставится сам. Публичная ссылка вида /folder/xxxx для этого не годится, у неё нет API.</div></div>
     </div>
 
@@ -2226,9 +2227,36 @@ function bxRender(folders, currentId, files, isRoot){
   bxBrowser.innerHTML = `<div class="panel" style="padding:16px">
     <div style="font-size:12.5px;margin-bottom:10px">${crumbs}</div>${rows}${all}${pick}</div>`;
 }
+/* Путь к выбранной папке на Диске Битрикс24 — показываем под полем */
+function bxPathShow(){
+  const el = document.getElementById('bxFolderPath'); if(!el) return;
+  const id = bxFolder.value.trim();
+  let saved = null; try{ saved = JSON.parse(localStorage.getItem('avb_folder_path')||'null'); }catch(e){}
+  el.innerHTML = !id ? '' : (saved && saved.id===id)
+    ? `Путь на Диске: <b>${esc(saved.path)}</b>`
+    : `<span class="hint">Путь к папке ID ${esc(id)} пока неизвестен</span> <button class="btn btn-ghost btn-sm" style="padding:0 4px" onclick="bxPathResolve()">Показать путь</button>`;
+}
+function bxPathSave(id, path){ try{ localStorage.setItem('avb_folder_path', JSON.stringify({id:String(id), path})); }catch(e){} bxPathShow(); }
+async function bxPathResolve(){
+  const id = bxFolder.value.trim(); if(!id) return;
+  const el = document.getElementById('bxFolderPath'); el.innerHTML = '<span class="hint">Определяем путь…</span>';
+  try{
+    const names = []; let cur = id, storageId = null;
+    for(let i=0;i<15 && cur;i++){
+      const f = await bxCall('disk.folder.get',{id:cur});
+      if(!f) break;
+      storageId = f.STORAGE_ID || storageId;
+      if(!f.PARENT_ID) break;          // корень хранилища — его имя возьмём из хранилища
+      names.unshift(f.NAME); cur = f.PARENT_ID;
+    }
+    if(storageId){ try{ const st = await bxCall('disk.storage.get',{id:storageId}); if(st && st.NAME) names.unshift(st.NAME); }catch(e){} }
+    bxPathSave(id, names.join(' / ') || ('ID '+id));
+  }catch(e){ el.innerHTML = `<span class="hint">Не удалось определить путь: ${esc(e.message)}</span>`; }
+}
 function bxPick(id){
   bxFolder.value = id;
   localStorage.setItem('avb_folder', id);
+  bxPathSave(id, BX_CRUMB.map(c=>c.name).join(' / ') || ('ID '+id));
   const name = BX_CRUMB.length ? BX_CRUMB[BX_CRUMB.length-1].name : id;
   bxBrowser.innerHTML = `<div class="note">${esc(T('bxPicked'))}: <b>${esc(name)}</b> (ID ${esc(id)})</div>`;
   toast(T('saved'));
@@ -3029,6 +3057,7 @@ impIn.addEventListener('change', async e=>{
   skDict.value = localStorage.getItem('avb_skills') || DEFAULT_SKILLS;
   bxHook.value = localStorage.getItem('avb_hook') || '';
   bxFolder.value = localStorage.getItem('avb_folder') || '';
+  bxPathShow(); bxFolder.addEventListener('input', bxPathShow);
   setLang(LANG); refresh(); armSync(); renderMe(); go('match');
 })();
 
