@@ -1152,7 +1152,12 @@ function pickSkills(raw){
 }
 function pickPosition(raw, folder){
   const m = raw.match(/(?:желаемая\s*должность|должность|позиция|цель|вазифа|мансаб|position)\s*[:\-–]\s*(.{3,60})/i);
-  if(m) return m[1].split(/[\n|·•]/)[0].trim();
+  if(m){
+    let pos = m[1].split(/[\n|·•,;]/)[0].trim();
+    // Убираем лишнее: даты, «период работы», скобки с датами
+    pos = pos.replace(/[\(\[].{0,30}[\)\]]/g,'').replace(/\d{4}\s*г?\.?.*/,'').trim();
+    if(pos.length>=3 && pos.length<=50) return pos;
+  }
   return folder || null;
 }
 function pickLastJob(raw){
