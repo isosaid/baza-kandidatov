@@ -1434,14 +1434,38 @@ async function downloadResume(id, filename){
   try{
     const rec = await dbGetOne(id);
     if(!rec){ toast('Файл не найден в базе. Попробуйте загрузить резюме заново.'); return; }
-    if(!rec.fileData){
-      toast('⚠ Файл загружен до обновления. Удалите кандидата и загрузите резюме заново — кнопка скачивания появится.');
+    // Если есть локальный файл — скачиваем напрямую
+    if(rec.fileData){
+      const a = document.createElement('a');
+      a.href = rec.fileData;
+      a.download = filename || rec.file || 'resume';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
       return;
     }
-    const a = document.createElement('a');
-    a.href = rec.fileData;
-    a.download = filename || rec.file || 'resume';
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    // Если файл в Google Drive — скачиваем оттуда
+    if(rec.gdFileId){
+      toast('⏳ Загружаем резюме из Google Drive…');
+      let url, headers = {};
+      if(GD_TOKEN){
+        // Авторизованный доступ через API
+        url = `https://www.googleapis.com/drive/v3/files/${rec.gdFileId}?alt=media`;
+        headers['Authorization'] = 'Bearer ' + GD_TOKEN;
+      } else {
+        // Публичный доступ (файл открыт для всех)
+        url = `https://drive.google.com/uc?export=download&id=${rec.gdFileId}`;
+      }
+      const r = await fetch(url, {headers});
+      if(!r.ok) throw new Error('Ошибка Drive: HTTP ' + r.status);
+      const blob = await r.blob();
+      const objUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objUrl;
+      a.download = filename || rec.file || 'resume';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(()=>URL.revokeObjectURL(objUrl), 5000);
+      return;
+    }
+    toast('⚠ Резюме недоступно. Рекрутер должен загрузить файлы в Google Drive.');
   } catch(e){
     toast('Ошибка скачивания: ' + e.message);
   }
@@ -2249,8 +2273,92 @@ function exportJson(){ dl('baza_kandidatov_'+new Date().toISOString().slice(0,10
 const GD_CLIENT_ID = '375321992202-rt4fdgg18beo468vk01edk4380okrtsm.apps.googleusercontent.com';
 const GD_SCOPES = 'https://www.googleapis.com/auth/drive.file';
 const GD_FILE_NAME = 'baza_kandidatov_avesto.json';
+const GD_FOLDER_NAME = 'Avesto HR Резюме';
 let GD_TOKEN = null;
 let GD_FILE_ID = localStorage.getItem('avb_gd_file') || null;
+let GD_FOLDER_ID = localStorage.getItem('avb_gd_folder') || null;
+
+// Найти или создать папку для резюме в Drive
+async function gdGetFolder(){
+  if(GD_FOLDER_ID) return GD_FOLDER_ID;
+  // Ищем существующую папку
+  const q = encodeURIComponent(`name='${GD_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+  const r = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`,{
+    headers:{'Authorization':'Bearer '+GD_TOKEN}
+  });
+  const j = await r.json();
+  if(j.files && j.files.length>0){
+    GD_FOLDER_ID = j.files[0].id;
+    localStorage.setItem('avb_gd_folder', GD_FOLDER_ID);
+    return GD_FOLDER_ID;
+  }
+  // Создаём папку
+  const cr = await fetch('https://www.googleapis.com/drive/v3/files',{
+    method:'POST',
+    headers:{'Authorization':'Bearer '+GD_TOKEN,'Content-Type':'application/json'},
+    body: JSON.stringify({name:GD_FOLDER_NAME, mimeType:'application/vnd.google-apps.folder'})
+  });
+  const cj = await cr.json();
+  GD_FOLDER_ID = cj.id;
+  localStorage.setItem('avb_gd_folder', GD_FOLDER_ID);
+  // Открываем публичный доступ к папке
+  await fetch(`https://www.googleapis.com/drive/v3/files/${GD_FOLDER_ID}/permissions`,{
+    method:'POST',
+    headers:{'Authorization':'Bearer '+GD_TOKEN,'Content-Type':'application/json'},
+    body: JSON.stringify({role:'reader', type:'anyone'})
+  });
+  return GD_FOLDER_ID;
+}
+
+// Загрузить файл резюме в Drive, вернуть fileId
+async function gdUploadResume(id){
+  if(!GD_TOKEN) return null;
+  try{
+    const rec = await dbGetOne(id);
+    if(!rec || !rec.fileData) return null;
+    // Конвертируем base64 в Blob
+    const [header, b64] = rec.fileData.split(',');
+    const mime = (header.match(/:(.*?);/)||[])[1] || rec.fileMime || 'application/octet-stream';
+    const bin = atob(b64);
+    const arr = new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+    const blob = new Blob([arr],{type:mime});
+    const folderId = await gdGetFolder();
+    const fname = rec.file || (id+'.pdf');
+    // Проверяем, не загружен ли уже (по gdFileId в записи)
+    if(rec.gdFileId){
+      // Обновляем файл
+      const ur = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${rec.gdFileId}?uploadType=media`,{
+        method:'PATCH', headers:{'Authorization':'Bearer '+GD_TOKEN,'Content-Type':mime}, body:blob
+      });
+      if(ur.ok) return rec.gdFileId;
+    }
+    // Загружаем новый файл в папку
+    const meta = JSON.stringify({name:fname, parents:[folderId]});
+    const form = new FormData();
+    form.append('metadata', new Blob([meta],{type:'application/json'}));
+    form.append('file', blob);
+    const r = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',{
+      method:'POST', headers:{'Authorization':'Bearer '+GD_TOKEN}, body:form
+    });
+    if(!r.ok) return null;
+    const j = await r.json();
+    // Открываем публичный доступ к файлу
+    await fetch(`https://www.googleapis.com/drive/v3/files/${j.id}/permissions`,{
+      method:'POST',
+      headers:{'Authorization':'Bearer '+GD_TOKEN,'Content-Type':'application/json'},
+      body: JSON.stringify({role:'reader', type:'anyone'})
+    });
+    // Сохраняем gdFileId в запись кандидата
+    const updated = {...rec, gdFileId: j.id};
+    await new Promise((res,rej)=>{
+      const tx=DB.transaction('c','readwrite');
+      const req=tx.objectStore('c').put(updated);
+      req.onsuccess=()=>res(); req.onerror=e=>rej(e);
+    });
+    return j.id;
+  }catch(e){ console.warn('gdUploadResume error',e); return null; }
+}
 
 function gdSetStatus(msg, type){
   const el = document.getElementById('gdStatus');
@@ -2313,8 +2421,22 @@ async function gdSaveDb(){
   if(!GD_TOKEN){ toast('Сначала войдите в Google'); return; }
   gdSetStatus('⏳ Сохранение базы в Google Drive…','');
   try{
-    // Экспортируем данные без бинарников (fileData слишком большой)
-    const exportData = DATA.map(c=>{ const {fileData,fileMime,...rest}=c; return rest; });
+    // Загружаем файлы резюме в Drive для кандидатов у которых ещё нет gdFileId
+    const allRecs = await dbAll();
+    const withFiles = allRecs.filter(c=>c.fileData && !c.gdFileId);
+    if(withFiles.length>0){
+      gdSetStatus(`⏳ Загружаем ${withFiles.length} резюме в Google Drive…`,'');
+      let uploaded=0;
+      for(const rec of withFiles){
+        const fid = await gdUploadResume(rec.id);
+        if(fid) uploaded++;
+        gdSetStatus(`⏳ Загружено резюме: ${uploaded}/${withFiles.length}…`,'');
+      }
+    }
+    // Перечитываем свежие данные (теперь с gdFileId)
+    const freshData = await dbAll();
+    // Экспортируем данные без бинарников (fileData не нужен — файлы в Drive)
+    const exportData = freshData.map(c=>{ const {fileData,fileMime,...rest}=c; return rest; });
     const body = JSON.stringify({
       exported: new Date().toISOString(),
       count: exportData.length,
@@ -2344,8 +2466,10 @@ async function gdSaveDb(){
     localStorage.setItem('avb_gd_file', GD_FILE_ID);
     const fi = document.getElementById('gdFileId');
     if(fi) fi.value = GD_FILE_ID;
-    gdSetStatus(`✓ База сохранена (${exportData.length} кандидатов). ID файла: <b>${GD_FILE_ID}</b><br><span style="font-size:11px;color:var(--muted)">Поделитесь этим ID с коллегами, чтобы они могли загрузить базу.</span>`,'ok');
+    const filesUploaded = freshData.filter(c=>c.gdFileId).length;
+    gdSetStatus(`✓ База сохранена (${exportData.length} кандидатов, ${filesUploaded} резюме в Drive). ID файла: <b>${GD_FILE_ID}</b><br><span style="font-size:11px;color:var(--muted)">Поделитесь этим ID с коллегами, чтобы они могли загрузить базу.</span>`,'ok');
     toast('☁ База сохранена в Google Drive');
+    DATA = freshData;
   }catch(e){
     gdSetStatus('✕ Ошибка сохранения: '+e.message,'err');
   }
