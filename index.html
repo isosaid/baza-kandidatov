@@ -2120,7 +2120,7 @@ async function bxCall(method, params){
   if(!hook.endsWith('/')) hook += '/';
   const r = await fetch(hook+method+'.json', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(params||{})});
   const j = await r.json();
-  if(j.error) throw new Error(j.error_description||j.error);
+  if(j.error){ const e = new Error(j.error_description||j.error); e.code = j.error; throw e; }
   return j.result;
 }
 /* ---------- обозреватель Диска ----------
@@ -2281,7 +2281,8 @@ function bxPick(id){
 async function bxTest(){
   document.getElementById('bxLog').innerHTML=''; try{
     let u = null;
-    try{ u = await bxCall('user.current',{}); }catch(e){ if(!/scope|access|прав|denied|insufficient/i.test(e.message)) throw e; }
+    try{ u = await bxCall('user.current',{}); }
+    catch(e){ if(!(/insufficient_scope|access_denied/i.test(e.code||'') || /scope|privilege|access|прав|denied|insufficient/i.test(e.message))) throw e; }
     if(u){
       bxLog('✓ '+esc(T('bxOk'))+' — '+esc((u.NAME||'')+' '+(u.LAST_NAME||''))+' ('+esc(u.EMAIL||u.ID)+')','ok');
     } else {
