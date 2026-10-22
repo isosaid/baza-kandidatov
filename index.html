@@ -1588,6 +1588,16 @@ async function expandZips(files){
   return out;
 }
 
+async function mergeResumeFile(rec, f, folder){
+  const buf = await f.arrayBuffer();
+  const txt = await readFileText(new File([buf], f.name, {lastModified: f.lastModified||Date.now()}));
+  const b64 = await blobToDataUrl(new Blob([buf], {type: f.type||mimeByName(f.name)}));
+  const full = parseResume(txt,{id:rec.id,file:f.name,folder:folder||rec.folder,size:f.size,source:rec.source||'local',url:rec.url,
+    mtime:rec.applied,fileData:b64,fileMime:f.type||mimeByName(f.name)});
+  Object.assign(rec, full, {name: full.name||rec.name, status: rec.status, verdict: rec.verdict,
+    added: rec.added, applied: rec.applied||full.applied, bxPersonDir: rec.bxPersonDir||null, meta:false, gdFileId:null});
+  return rec;
+}
 async function ingestFiles(input){
   logBox.style.display='block'; document.getElementById('log').innerHTML='';
   const files = await expandZips(input);
@@ -1608,13 +1618,7 @@ async function ingestFiles(input){
     const metaHit = metas.length>1 ? (metas.find(c=>c.bxPersonDir && c.bxPersonDir===parent) || null) : metas[0];
     if(metaHit){
       try{
-        const buf = await f.arrayBuffer();
-        const txt = await readFileText(new File([buf], f.name, {lastModified: f.lastModified||Date.now()}));
-        const b64 = await blobToDataUrl(new Blob([buf]));
-        const full = parseResume(txt,{id:metaHit.id,file:f.name,folder:folder||metaHit.folder,size:f.size,source:'bitrix',url:metaHit.url,
-          mtime:metaHit.applied,fileData:b64,fileMime:f.type||mimeByName(f.name)});
-        Object.assign(metaHit, full, {name: full.name||metaHit.name, status: metaHit.status, verdict: metaHit.verdict,
-          added: metaHit.added, applied: metaHit.applied||full.applied, bxPersonDir: metaHit.bxPersonDir, meta:false});
+        await mergeResumeFile(metaHit, f, folder);
         fixed.push(metaHit); enriched++;
         log('✓ '+esc(f.name)+' — дополнен: '+esc(metaHit.name||T('noName')),'ok');
       }catch(e){ log('✕ '+esc(f.name)+' — '+esc(e.message||'ошибка чтения'),'e'); }
@@ -1960,6 +1964,19 @@ function openD(id){
   OPEN_ID = id;
   renderDetail(); go('detail');
 }
+/* Заполнить открытую карточку «по папке» из скачанного файла */
+async function fillFromFile(f){
+  const c = DATA.find(x=>x.id===OPEN_ID);
+  if(!c || !f) return;
+  if(!/\.(pdf|docx|doc|txt|rtf)$/i.test(f.name)){ toast('Нужен файл резюме: PDF, DOCX, DOC, RTF или TXT'); return; }
+  const box = document.getElementById('metaDrop'); if(box) box.textContent = 'Разбираем резюме…';
+  try{
+    await mergeResumeFile(c, f, null);
+    await dbPut([c]); DATA = await dbAll(); refresh();
+    renderDetail();
+    toast('✓ Карточка заполнена из резюме' + (c.scan ? ' — но в файле нет текстового слоя (скан)' : ''));
+  }catch(e){ if(box) box.textContent = 'Не удалось прочитать файл: '+(e.message||e); }
+}
 function renderDetail(){
   const c = DATA.find(x=>x.id===OPEN_ID);
   if(!c){ detailOut.innerHTML = `<div class="panel"><div class="empty">
@@ -2048,7 +2065,20 @@ function renderDetail(){
     </div>
 
     <div class="ai-panel">
-      ${!s||s.noCrit ? `<p class="hint">${esc(T('noScore'))}</p>` : `
+      ${c.meta ? `
+      <h4 style="margin-bottom:8px">Резюме ещё не разобрано</h4>
+      <p class="hint" style="margin-bottom:10px">Битрикс24 не отдал платформе сам файл, поэтому поля пустые, а процент не считается.</p>
+      <ol style="padding-left:18px;font-size:13px;line-height:1.7;margin-bottom:12px">
+        <li>${c.url?`<a href="${esc(c.url)}" target="_blank" rel="noopener">Откройте резюме в Битрикс24</a>`:'Откройте резюме в Битрикс24'} и скачайте файл.</li>
+        <li>Перетащите его сюда или выберите кнопкой.</li>
+      </ol>
+      <div id="metaDrop" style="border:1.5px dashed var(--line);border-radius:10px;padding:18px;text-align:center;font-size:13px;cursor:pointer"
+        onclick="metaIn.click()" ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
+        ondragleave="this.style.borderColor='var(--line)'"
+        ondrop="event.preventDefault();this.style.borderColor='var(--line)';fillFromFile(event.dataTransfer.files[0])">
+        Перетащите файл резюме сюда<br><span class="hint">PDF, DOCX, DOC, RTF, TXT</span></div>
+      <input type="file" id="metaIn" hidden accept=".pdf,.docx,.doc,.txt,.rtf" onchange="fillFromFile(this.files[0])">` :
+      !s||s.noCrit ? `<p class="hint">${esc(T('noScore'))}</p>` : `
       <div class="score-row">
         <div class="dial lg" data-pct="${s.score}" data-color="${s.score>=85?'accent':(s.score>=65?'warn':'danger')}"></div>
         <div><div class="label">${esc(T('score'))}</div><div class="sub">${esc(LAST_CRIT.pos||'—')}</div></div>
