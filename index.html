@@ -2730,7 +2730,11 @@ async function setVerdict(id, v){
   if(OPEN_ID===id) renderDetail(); else if(LAST_SHORT.length) runMatch();
   // При «Подходит» — добавить в папку Избранного по должности; при отмене — убрать
   if(c.verdict==='fit'){
-    const prof = (cPos?.value||'').trim() || (LAST_CRIT?.pos||'').trim() || (c.folder||'').trim(); // вакансия из поиска или папка файла
+    let prof = (cPos?.value||'').trim() || (LAST_CRIT?.pos||'').trim() || (c.folder||'').trim(); // вакансия из поиска или папка файла
+    if(!prof){
+      // Если ничего не определилось — спросить название вакансии
+      prof = (prompt('В какую папку добавить кандидата?\n(Введите название вакансии)') || '').trim();
+    }
     if(prof){
       const scoreVal = LAST_SHORT.find(x=>x.c.id===c.id)?.score ?? null;
       const existing = FAV.find(f=>f.name===prof);
