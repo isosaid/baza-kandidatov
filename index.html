@@ -2725,7 +2725,7 @@ async function setVerdict(id, v){
   if(OPEN_ID===id) renderDetail(); else if(LAST_SHORT.length) runMatch();
   // При «Подходит» — добавить в папку Избранного по должности; при отмене — убрать
   if(c.verdict==='fit'){
-    const prof = (c.position||'').trim(); // только разобранная должность, не имя файла
+    const prof = (cPos?.value||'').trim() || (LAST_CRIT?.pos||'').trim(); // вакансия из поиска
     if(prof){
       const scoreVal = LAST_SHORT.find(x=>x.c.id===c.id)?.score ?? null;
       const existing = FAV.find(f=>f.name===prof);
