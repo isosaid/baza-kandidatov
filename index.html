@@ -1806,7 +1806,6 @@ function candCard(s,i){
        <div class="cand-name">${esc(c.name||c.file)}</div>
        <div class="cand-role">${esc(role)}</div>
        <div class="cand-tags">${(c.skills||[]).slice(0,6).map(k=>`<span class="pill">${esc(k)}</span>`).join('')}</div>
-       ${makeSummary(c)?`<div class="cand-ai">${esc(makeSummary(c))}</div>`:''}
        <div class="cand-checks">
          ${s.why.map(w=>`<div class="check-ok">${ICON_OK}${esc(w)}</div>`).join('')}
          ${s.miss.map(w=>`<div class="check-warn">${ICON_WN}${esc(w)}</div>`).join('')}
