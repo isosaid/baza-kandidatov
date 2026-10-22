@@ -1603,6 +1603,7 @@ async function ingestFiles(input){
   if(fixed.length) await dbPut(fixed);
   DATA = await dbAll();
   renderFav();
+  if(fixed.length) toast('📁 Папка вакансии исправлена у ' + fixed.length + ' кандидатов');
   setProg(null);
   loadKpis.style.display='grid';
   loadKpis.innerHTML = [[list.length,T('total')],[fresh.length,T('parsed')],[fresh.filter(c=>c.scan).length,T('scans')],[dupes,T('dupes')]]
@@ -2695,7 +2696,15 @@ function renderFav(){
       <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="delHist(${i})">${esc(T('del'))}</button>
     </div>`).join('') : `<p class="hint">${esc(T('favHistEmpty'))}</p>`;
 
-  favOut.innerHTML = `<h3 style="font-size:15px;margin-bottom:12px">${esc(T('favColl'))}</h3>${colls}
+  const badCnt = FAV.filter(f=>PERSON_DIR.test(f.name||'')).length;
+  const fixBox = badCnt ? `
+    <div class="panel" style="margin-bottom:14px;background:#F8EFE0;border-color:#EDD9A0">
+      <div style="font-weight:600;margin-bottom:6px">Папок, названных по имени кандидата: ${badCnt}</div>
+      <div class="hint" style="margin-bottom:10px">Нажмите кнопку и выберите общую папку с резюме, в которой лежат «Маркетолог», «Специалист отдела транспорта» и другие.
+        Кандидаты не задвоятся: программа увидит папку вакансии у каждого и сама перенесёт их в нужные папки Избранного.</div>
+      <button class="btn btn-primary btn-sm" onclick="document.getElementById('dIn').click()">Выбрать папку с резюме</button>
+    </div>` : '';
+  favOut.innerHTML = `<h3 style="font-size:15px;margin-bottom:12px">${esc(T('favColl'))}</h3>${fixBox}${colls}
     <h3 style="font-size:15px;margin:24px 0 12px">${esc(T('favHist'))}</h3>${hist}`;
 }
 
