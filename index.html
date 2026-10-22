@@ -2723,20 +2723,21 @@ async function setVerdict(id, v){
   if(c.verdict==='unfit') c.status='reject';
   await dbPut([c]); refresh();
   if(OPEN_ID===id) renderDetail(); else if(LAST_SHORT.length) runMatch();
-  // При «Подходит» — сразу добавить в папку Избранного по должности
+  // При «Подходит» — добавить в папку Избранного по должности; при отмене — убрать
   if(c.verdict==='fit'){
-    const prof = (c.position||c.folder||'').trim();
+    const prof = (c.position||'').trim(); // только разобранная должность, не имя файла
     if(prof){
+      const scoreVal = LAST_SHORT.find(x=>x.c.id===c.id)?.score ?? null;
       const existing = FAV.find(f=>f.name===prof);
       if(existing){
         if(!existing.items.find(i=>i.id===c.id)){
-          existing.items.push({id:c.id, name:c.name||c.file, score:null});
+          existing.items.push({id:c.id, name:c.name||c.file, score:scoreVal});
           existing.date=Date.now();
           LSS('avb_fav',FAV); renderFav();
         }
       } else {
         FAV.unshift({id:'f'+Date.now(), name:prof, date:Date.now(), crit:null,
-          items:[{id:c.id, name:c.name||c.file, score:null}]});
+          items:[{id:c.id, name:c.name||c.file, score:scoreVal}]});
         LSS('avb_fav',FAV); renderFav();
       }
       toast('✓ ' + (c.name||c.file) + ' → 📁 ' + prof);
@@ -2744,6 +2745,15 @@ async function setVerdict(id, v){
       toast(T('verdictFit'));
     }
   } else {
+    // Убрать из всех папок избранного если сняли «Подходит»
+    let changed = false;
+    FAV.forEach(f=>{
+      const before = f.items.length;
+      f.items = f.items.filter(i=>i.id!==c.id);
+      if(f.items.length!==before) changed=true;
+    });
+    FAV = FAV.filter(f=>f.items.length>0); // убрать пустые папки
+    if(changed){ LSS('avb_fav',FAV); renderFav(); }
     toast(T(c.verdict==='unfit'?'verdictUnfit':'saved'));
   }
 }
