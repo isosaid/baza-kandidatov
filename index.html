@@ -2285,7 +2285,7 @@ function gdSignIn(){
   }
   const params = new URLSearchParams({
     client_id: GD_CLIENT_ID,
-    redirect_uri: location.origin + location.pathname,
+    redirect_uri: 'https://isosaid.github.io/baza-kandidatov/',
     response_type: 'token',
     scope: GD_SCOPES,
     include_granted_scopes: 'true',
