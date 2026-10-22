@@ -468,7 +468,7 @@ td .mut{color:var(--muted);font-size:12px}
     <div id="bxMode"></div>
     <div class="grid g2" style="margin-top:16px">
       <div class="field"><label data-i="bxHook">Входящий вебхук</label><input class="inp" id="bxHook" placeholder="https://crm.avesto.tj/rest/1/xxxxxxxxxxxx/">
-        <div class="hint" style="margin-top:6px" data-i="bxHookHint">Битрикс24 → Разработчикам → Другое → Входящий вебхук. Права: disk, crm.</div></div>
+        <div class="hint" style="margin-top:6px" data-i="bxHookHint">Битрикс24 → Разработчикам → Другое → Входящий вебхук. Права: достаточно disk (Диск).</div></div>
       <div class="field"><label data-i="bxFolder">Папка с резюме</label>
         <div class="row" style="flex-wrap:nowrap">
           <input class="inp" id="bxFolder" placeholder="ID папки" style="max-width:150px">
@@ -655,7 +655,7 @@ ru:{appName:'База кандидатов',appOrg:'ООО «Авесто Гру
  needOcr:'Требуют ручного ввода (скан без текстового слоя)',
  ocrNote:'У этих файлов нет текстового слоя — это сканы или фотографии, текст из них машинно не читается. Откройте карточку и заполните поля вручную либо попросите кандидата прислать резюме файлом Word или PDF с текстом.',
  bxH:'Битрикс24',bxP:'Подключение к Диску портала и синхронизация папки с резюме.',
- bxHook:'Входящий вебхук',bxHookHint:'Битрикс24 → Разработчикам → Другое → Входящий вебхук. Права: disk, crm.',
+ bxHook:'Входящий вебхук',bxHookHint:'Битрикс24 → Разработчикам → Другое → Входящий вебхук. Права: достаточно disk (Диск).',
  bxFolder:'Папка с резюме',bxFolderHint:'Нажмите «Выбрать на Диске» и дойдите до нужной папки — ID подставится сам. Публичная ссылка вида /folder/xxxx для этого не годится, у неё нет API.',
  bxPickBtn:'Выбрать на Диске',bxLoading:'читаю Диск…',bxStorages:'Хранилища',bxMyDisk:'Мой Диск',bxCommon:'Общий диск',
  bxNoSub:'Вложенных папок нет',bxAll:'Показать все хранилища портала',bxPersonal:'личный диск',bxGroup:'диск группы',
@@ -758,7 +758,7 @@ tj:{appName:'Пойгоҳи номзадҳо',appOrg:'ҶДММ «Авесто Г
  needOcr:'Воридкунии дастӣ лозим аст (скани бематн)',
  ocrNote:'Ин файлҳо қабати матнӣ надоранд — скан ё акс мебошанд, матн аз онҳо мошинӣ хонда намешавад. Варақаро кушоед ва майдонҳоро дастӣ пур кунед ё аз номзад резюмеи Word ё PDF-и матнӣ хоҳиш кунед.',
  bxH:'Битрикс24',bxP:'Пайвастшавӣ ба Диски портал ва ҳамоҳангсозии ҷузвдони резюме.',
- bxHook:'Вебхуки воридотӣ',bxHookHint:'Битрикс24 → Ба таҳиягарон → Дигар → Вебхуки воридотӣ. Ҳуқуқҳо: disk, crm.',
+ bxHook:'Вебхуки воридотӣ',bxHookHint:'Битрикс24 → Ба таҳиягарон → Дигар → Вебхуки воридотӣ. Ҳуқуқҳо: disk (Диск) кифоя аст.',
  bxFolder:'Ҷузвдони резюме',bxFolderHint:'«Дар Диск интихоб кардан»-ро пахш кунед ва то ҷузвдони лозимӣ равед — ID худаш гузошта мешавад. Истиноди оммавии /folder/xxxx барои ин мувофиқ нест, API надорад.',
  bxPickBtn:'Дар Диск интихоб кардан',bxLoading:'Диск хонда мешавад…',bxStorages:'Анборҳо',bxMyDisk:'Диски ман',bxCommon:'Диски умумӣ',
  bxNoSub:'Ҷузвдони дохилӣ нест',bxAll:'Ҳамаи анборҳои порталро нишон додан',bxPersonal:'диски шахсӣ',bxGroup:'диски гурӯҳ',
@@ -2264,8 +2264,16 @@ function bxPick(id){
 
 async function bxTest(){
   document.getElementById('bxLog').innerHTML=''; try{
-    const u = await bxCall('user.current',{});
-    bxLog('✓ '+esc(T('bxOk'))+' — '+esc((u.NAME||'')+' '+(u.LAST_NAME||''))+' ('+esc(u.EMAIL||u.ID)+')','ok');
+    let u = null;
+    try{ u = await bxCall('user.current',{}); }catch(e){ if(!/scope|access|прав|denied|insufficient/i.test(e.message)) throw e; }
+    if(u){
+      bxLog('✓ '+esc(T('bxOk'))+' — '+esc((u.NAME||'')+' '+(u.LAST_NAME||''))+' ('+esc(u.EMAIL||u.ID)+')','ok');
+    } else {
+      // у вебхука только право «Диск» — проверяем связь через Диск
+      const st = await bxCall('disk.storage.getlist',{});
+      const n = ((st && st.items) || st || []).length;
+      bxLog('✓ Связь с Диском Битрикс24 есть — доступно хранилищ: '+n,'ok');
+    }
     localStorage.setItem('avb_hook', bxHook.value.trim());
   }catch(e){ bxLog('✕ '+esc(T('bxFail'))+' — '+esc(e.message),'e'); bxLog(esc(T('bxCors')),'w'); }
 }
