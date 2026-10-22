@@ -1168,7 +1168,7 @@ function pickPosition(raw, folder){
     pos = pos.replace(/[\(\[].{0,30}[\)\]]/g,'').replace(/\d{4}\s*г?\.?.*/,'').trim();
     if(pos.length>=3 && pos.length<=50) return pos;
   }
-  return folder || null;
+  return (folder && !PERSON_DIR.test(folder)) ? folder : null;
 }
 function pickLastJob(raw){
   const m = raw.match(/(?:ООО|ОАО|ЗАО|ИП|ҶДММ|ҶСК|АО)\s*[«"'"]?([^»"'"\n]{2,50})[»"'"]?/);
@@ -1376,7 +1376,7 @@ function scoreCandidate(c, crit){
     if(ok) why.push(T('langOk')+': '+crit.lang); else miss.push(crit.lang);
   }
   if(crit.pos){
-    const p = norm(crit.pos), src = norm((c.position||'')+' '+(c.folder||'')+' '+(c.raw||'').slice(0,500));
+    const p = norm(crit.pos), src = norm((c.position||'')+' '+(posOf(c)||'')+' '+(c.raw||'').slice(0,500));
     const words = p.split(' ').filter(w=>w.length>3);
     const hit = words.length ? words.filter(w=>src.includes(w.slice(0,Math.max(4,w.length-2)))).length/words.length : (src.includes(p)?1:0);
     add('pos', hit);
@@ -1635,9 +1635,11 @@ function fillSelects(){
   const stCur=fStatus.value;
   fStatus.innerHTML = '<option value="">'+esc(T('anyStatus'))+'</option>'+Object.keys(STATUS).map(k=>`<option value="${k}">${esc(STATUS[k][LANG])}</option>`).join('');
   fStatus.value=stCur;
-  const positions = uniq(DATA.map(c=>c.folder||c.position));
+  const positions = uniq(DATA.map(posOf));
+  const noPos = DATA.filter(c=>!posOf(c)).length;
   posChips.innerHTML = [`<span class="chip ${POS_FILTER?'':'selected'}" onclick="setPos('')">${esc(T('anyPos'))}</span>`]
-    .concat(positions.map(p=>`<span class="chip ${POS_FILTER===p?'selected':''}" onclick="setPos(${jsArg(p)})">${esc(p)}</span>`)).join('');
+    .concat(positions.map(p=>`<span class="chip ${POS_FILTER===p?'selected':''}" onclick="setPos(${jsArg(p)})">${esc(p)} <b class="num" style="margin-left:5px;opacity:.6">${DATA.filter(x=>posOf(x)===p).length}</b></span>`))
+    .concat(noPos?[`<span class="chip ${POS_FILTER===NO_POS?'selected':''}" onclick="setPos(NO_POS)">без вакансии <b class="num" style="margin-left:5px;opacity:.6">${noPos}</b></span>`]:[]).join('');
   const cats = CATEGORIES.map(c=>c[0]).filter(c=>DATA.some(x=>x.category===c));
   catChips.innerHTML = [`<span class="chip ${CAT_FILTER?'':'selected'}" onclick="setCat('')">${esc(T('anyCat'))}</span>`]
     .concat(cats.map(c=>`<span class="chip ${CAT_FILTER===c?'selected':''}" onclick="setCat(${jsArg(c)})">${esc(c)} <b class="num" style="margin-left:5px;opacity:.6">${DATA.filter(x=>x.category===c).length}</b></span>`)).join('');
@@ -1648,8 +1650,20 @@ function fillSelects(){
     cGender.innerHTML = '<option value="">'+esc(T('anyGender'))+'</option><option value="м">'+esc(T('male'))+'</option><option value="ж">'+esc(T('female'))+'</option>';
     cGender.value=cur; }
 }
-function setPos(p){ POS_FILTER=p; PAGE=50; renderBase(); }
-function setCat(c){ CAT_FILTER=c; PAGE=50; renderBase(); }
+/* Вакансия кандидата: папка вакансии, а если её нет — должность из резюме.
+   Подпапки с именем кандидата и датой вакансией не считаются. */
+const NO_POS = '\u0000none';
+function posOf(c){
+  if(c.folder && !PERSON_DIR.test(c.folder)) return c.folder;
+  return (c.position && !PERSON_DIR.test(c.position)) ? c.position : null;
+}
+/* После выбора фильтра — показать таблицу, она обычно ниже экрана */
+function showBaseTable(){
+  const el = document.getElementById('baseCnt') || tblBase;
+  el.scrollIntoView({behavior:'smooth', block:'start'});
+}
+function setPos(p){ POS_FILTER = POS_FILTER===p ? '' : p; PAGE=50; renderBase(); if(POS_FILTER) showBaseTable(); }
+function setCat(c){ CAT_FILTER = CAT_FILTER===c ? '' : c; PAGE=50; renderBase(); if(CAT_FILTER) showBaseTable(); }
 
 function matchQuery(c,q){
   if(!q) return true;
@@ -1659,7 +1673,7 @@ function matchQuery(c,q){
 function currentFiltered(){
   const q=qs.value, ci=fCity.value, ed=fEdu.value, st=fStatus.value;
   return DATA.filter(c=>matchQuery(c,q)
-    && (!POS_FILTER || (c.folder||c.position)===POS_FILTER)
+    && (!POS_FILTER || (POS_FILTER===NO_POS ? !posOf(c) : posOf(c)===POS_FILTER))
     && (!CAT_FILTER || c.category===CAT_FILTER)
     && (!ci || c.city===ci) && (!ed || c.edu===+ed) && (!st || (c.status||'new')===st));
 }
@@ -1682,7 +1696,7 @@ function renderBase(){
    return `<tr class="clk" onclick="openD(${jsArg(c.id)})">
      <td><div class="nm">${esc(c.name||'—')}</div><div class="mut">${esc(c.phone||c.email||c.file)}</div></td>
      <td>${c.category?`<span class="pill">${esc(c.category)}</span>`:'<span class="mut">—</span>'}</td>
-     <td>${esc(c.position||c.folder||'—')}</td>
+     <td>${esc(posOf(c)||'—')}</td>
      <td>${c.exp!=null?c.exp+' '+esc(T('yrs')):'<span class="mut">—</span>'}</td>
      <td>${esc(c.city||'—')}</td>
      <td class="num" style="font-weight:400">${esc(fmtDate(c.applied))}</td>
@@ -1695,7 +1709,7 @@ function renderBase(){
 function sortBy(k){ if(SORT.k===k) SORT.d*=-1; else {SORT.k=k;SORT.d=(k==='name'||k==='category')?1:-1;} PAGE=50; renderBase(); }
 
 function renderStats(){
-  const pos = uniq(DATA.map(c=>c.folder||c.position)).length;
+  const pos = uniq(DATA.map(posOf)).length;
   const scans = DATA.filter(c=>c.scan).length;
   const withExp = DATA.filter(c=>c.exp!=null);
   const avg = withExp.length ? (withExp.reduce((s,c)=>s+c.exp,0)/withExp.length).toFixed(1) : '—';
@@ -1823,7 +1837,7 @@ const ICON_OK = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" ari
 const ICON_WN = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6.3" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v4.2M8 11.3v.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`;
 function candCard(s,i){
   const c = s.c, cls = s.score>=85?'accent':(s.score>=65?'warn':'danger');
-  const role = [c.position||c.folder, c.exp!=null?c.exp+' '+T('yrs'):null, c.city, c.edu?EDU_NAME[c.edu][LANG]:null].filter(Boolean).join(' · ');
+  const role = [posOf(c), c.exp!=null?c.exp+' '+T('yrs'):null, c.city, c.edu?EDU_NAME[c.edu][LANG]:null].filter(Boolean).join(' · ');
   const jid = jsArg(c.id);
   return `<div class="cand-card">
    <div class="cand-top">
@@ -1879,7 +1893,7 @@ function copyAi(){
     город:cCity.value||null, язык:cLang.value||null};
   const body = LAST_SHORT.map((s,i)=>({
     код:'K-'+String(i+1).padStart(3,'0'),
-    позиция:s.c.position||s.c.folder||null, опыт_лет:s.c.exp, образование:s.c.edu?EDU_NAME[s.c.edu].ru:null,
+    позиция:posOf(s.c), опыт_лет:s.c.exp, образование:s.c.edu?EDU_NAME[s.c.edu].ru:null,
     город:s.c.city, языки:s.c.langs, навыки:s.c.skills, балл:s.score, плюсы:s.why, минусы:s.miss
   }));
   const txt = 'Критерии к позиции:\n'+JSON.stringify(crit,null,1)+'\n\nКандидаты (обезличено):\n'+JSON.stringify(body,null,1);
@@ -1910,7 +1924,7 @@ function renderDetail(){
   <div class="detail-header">
     <div>
       <h2>${esc(c.name||c.file)}</h2>
-      <div class="sub">${esc([c.position||c.folder, c.city, c.exp!=null?c.exp+' '+T('yrs'):null].filter(Boolean).join(' · '))}</div>
+      <div class="sub">${esc([posOf(c), c.city, c.exp!=null?c.exp+' '+T('yrs'):null].filter(Boolean).join(' · '))}</div>
       <div class="file-badges">
         <span class="file-badge">${esc(c.file)}</span>
         <span class="file-badge">${esc(T('source'))}: ${c.source==='bitrix'?'Битрикс24':esc(T('local'))}</span>
@@ -1929,7 +1943,7 @@ function renderDetail(){
         <h3>${esc(T('mainInfo'))}</h3>
         <div class="grid g2">
           <div class="field"><label>${esc(T('cName'))}</label><input class="inp" id="edName" value="${esc(c.name||'')}"></div>
-          <div class="field"><label>${esc(T('cPosition'))}</label><input class="inp" id="edPos" value="${esc(c.position||c.folder||'')}"></div>
+          <div class="field"><label>${esc(T('cPosition'))}</label><input class="inp" id="edPos" value="${esc(posOf(c)||'')}"></div>
           <div class="field"><label>${esc(T('phone'))}</label><input class="inp" id="edPhone" value="${esc(c.phone||'')}"></div>
           <div class="field"><label>${esc(T('email'))}</label><input class="inp" id="edMail" value="${esc(c.email||'')}"></div>
           <div class="field"><label>${esc(T('cCityT'))}</label><input class="inp" id="edCity" value="${esc(c.city||'')}"></div>
