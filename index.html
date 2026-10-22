@@ -2811,11 +2811,9 @@ async function setVerdict(id, v){
   // При «Подходит» — добавить в папку Избранного по должности; при отмене — убрать
   if(c.verdict==='fit'){
     const vac = (c.folder && !PERSON_DIR.test(c.folder)) ? c.folder.trim() : '';
-    let prof = (cPos?.value||'').trim() || (LAST_CRIT?.pos||'').trim() || vac; // вакансия из поиска или папка вакансии
-    if(!prof){
-      // Если ничего не определилось — спросить название вакансии
-      prof = (prompt('В какую папку добавить кандидата?\n(Введите название вакансии)') || '').trim();
-    }
+    // Папка без вопросов: должность из поиска → папка вакансии → категория (определяется автоматически) → «Без вакансии»
+    const prof = (cPos?.value||'').trim() || (LAST_CRIT?.pos||'').trim() || vac
+      || (c.category||'').trim() || 'Без вакансии';
     if(prof){
       const scoreVal = LAST_SHORT.find(x=>x.c.id===c.id)?.score ?? null;
       const existing = FAV.find(f=>f.name===prof);
