@@ -542,21 +542,45 @@ td .mut{color:var(--muted);font-size:12px}
 
     <div class="panel" style="margin-bottom:18px">
       <h3 style="font-size:15px;margin-bottom:4px">☁ Google Drive — общая база</h3>
-      <p class="hint" style="margin-bottom:12px">Рекрутер загружает резюме → сохраняет в Drive. Руководители открывают платформу → видят ту же базу.</p>
+      <p class="hint" style="margin-bottom:12px">Рекрутер загружает резюме → база уходит в Drive сама. Коллеги открывают ссылку на платформу с любого компьютера → видят ту же базу, без входа в Google.</p>
       <div id="gdStatus" style="margin-bottom:10px"></div>
       <div class="row" style="flex-wrap:wrap;gap:8px">
         <button class="btn btn-line btn-sm" id="gdSignIn" onclick="gdSignIn()">🔑 Войти через Google</button>
         <button class="btn btn-line btn-sm" id="gdSignOut" onclick="gdSignOut()" style="display:none">Выйти из Google</button>
         <button class="btn btn-primary btn-sm" id="gdSave" onclick="gdSaveDb()" style="display:none">⬆ Сохранить базу в Drive</button>
         <button class="btn btn-line btn-sm" id="gdLoad" onclick="gdLoadDb()" style="display:none">⬇ Загрузить базу из Drive</button>
+        <button class="btn btn-line btn-sm" onclick="gdRefreshNow()">🔄 Обновить сейчас</button>
       </div>
-      <div style="margin-top:12px">
-        <label class="hint" style="display:block;margin-bottom:4px">Или введите ID файла (для просмотра без входа):</label>
+
+      <label class="row" id="gdAutoRow" style="gap:8px;margin-top:12px;cursor:pointer;display:none">
+        <input type="checkbox" id="gdAuto" onchange="gdSetAuto(this.checked)">
+        <span class="hint" style="margin:0">Автоматически сохранять базу в Drive после каждого изменения</span>
+      </label>
+
+      <div id="gdShareBox" style="margin-top:12px;display:none">
+        <label class="hint" style="display:block;margin-bottom:4px">Ссылка для коллег — открывается на любом компьютере, вход не нужен:</label>
         <div class="row" style="gap:8px">
-          <input class="inp" id="gdFileId" style="flex:1;font-size:12px;font-family:var(--mono)" placeholder="1aBcD...xyz (из ссылки Drive)" value="${localStorage.getItem('avb_gd_file')||''}">
-          <button class="btn btn-line btn-sm" onclick="gdLoadByFileId()">Загрузить</button>
+          <input class="inp" id="gdShareLink" readonly style="flex:1;font-size:12px;font-family:var(--mono)">
+          <button class="btn btn-line btn-sm" onclick="gdCopyLink()">Скопировать</button>
         </div>
       </div>
+
+      <details style="margin-top:14px">
+        <summary class="hint" style="cursor:pointer">Настройка доступа без входа (один раз)</summary>
+        <div style="margin-top:10px">
+          <label class="hint" style="display:block;margin-bottom:4px">Браузерный ключ API Google (Google Cloud → APIs &amp; Services → Credentials → Create credentials → API key, включите Google Drive API):</label>
+          <div class="row" style="gap:8px">
+            <input class="inp" id="gdApiKey" style="flex:1;font-size:12px;font-family:var(--mono)" placeholder="AIza…">
+            <button class="btn btn-line btn-sm" onclick="gdSaveApiKey()">Сохранить ключ</button>
+          </div>
+          <p class="hint" style="margin-top:8px">Без ключа Google не отдаёт файл браузеру, в котором нет входа в Google. Ключ не даёт доступа к вашему Диску — только к файлам, уже открытым по ссылке. Ограничьте его в Google Cloud доменом <span style="font-family:var(--mono)">isosaid.github.io</span> и одним Google Drive API.</p>
+          <label class="hint" style="display:block;margin:14px 0 4px">ID файла базы (подставляется сам после первого сохранения):</label>
+          <div class="row" style="gap:8px">
+            <input class="inp" id="gdFileId" style="flex:1;font-size:12px;font-family:var(--mono)" placeholder="1aBcD…xyz (из ссылки Drive)">
+            <button class="btn btn-line btn-sm" onclick="gdLoadByFileId()">Загрузить</button>
+          </div>
+        </div>
+      </details>
     </div>
 
     <div class="panel">
@@ -567,7 +591,7 @@ td .mut{color:var(--muted);font-size:12px}
         <input type="file" id="impIn" hidden accept=".json">
         <button class="btn btn-danger btn-sm" onclick="wipe()"><span data-i="wipe">Очистить базу</span></button>
       </div>
-      <p class="hint" style="margin-top:12px" data-i="setHint">База хранится в браузере этого компьютера (IndexedDB). Для переноса используйте выгрузку в файл.</p>
+      <p class="hint" style="margin-top:12px" data-i="setHint">Рабочая копия базы лежит в браузере этого компьютера (IndexedDB), а общая — в Google Drive: она и открывается на других компьютерах. Выгрузка в файл нужна только для резервной копии.</p>
     </div>
 
     <div class="panel">
@@ -669,7 +693,7 @@ ru:{appName:'База кандидатов',appOrg:'ООО «Авесто Гру
  wReset:'По умолчанию',save:'Сохранить',saved:'Сохранено',
  setSkills:'Словарь навыков',setSkillsHint:'По одному навыку в строке. Синонимы через «=». Поиск учитывает русские окончания и таджикские буквы. Применяется при следующей загрузке резюме.',
  setData:'Данные',expJson2:'Выгрузить базу в файл',impJson:'Загрузить базу из файла',wipe:'Очистить базу',
- setHint:'База хранится в браузере этого компьютера (IndexedDB). Для переноса используйте выгрузку в файл.',
+ setHint:'Рабочая копия базы лежит в браузере этого компьютера (IndexedDB), а общая — в Google Drive: именно она открывается на других компьютерах. Выгрузка в файл нужна для резервной копии.',
  setPriv:'Приватность',
  privNote:'Экспорт для внешнего ИИ-помощника обезличен: вместо ФИО, телефона и почты выгружается код кандидата. Сопоставление кода с личными данными остаётся только в этой базе.',
  footer:'Разработано Отделом автоматизации холдинга ООО «Авесто Групп» · ISJ',
@@ -772,7 +796,7 @@ tj:{appName:'Пойгоҳи номзадҳо',appOrg:'ҶДММ «Авесто Г
  wReset:'Пешфарз',save:'Нигоҳ доштан',saved:'Нигоҳ дошта шуд',
  setSkills:'Луғати малакаҳо',setSkillsHint:'Ҳар малака дар сатри алоҳида. Ҳаммаъноҳо бо «=». Ҷустуҷӯ пасвандҳои русӣ ва ҳарфҳои тоҷикиро ба назар мегирад. Ҳангоми боргузории навбатӣ татбиқ мешавад.',
  setData:'Маълумот',expJson2:'Содироти пойгоҳ ба файл',impJson:'Воридоти пойгоҳ аз файл',wipe:'Тоза кардани пойгоҳ',
- setHint:'Пойгоҳ дар браузери ҳамин компютер нигоҳ дошта мешавад (IndexedDB). Барои интиқол содиротро истифода баред.',
+ setHint:'Нусхаи кории пойгоҳ дар браузери ҳамин компютер (IndexedDB), нусхаи умумӣ дар Google Drive аст — маҳз ҳамон дар компютерҳои дигар кушода мешавад. Содирот ба файл барои нусхаи эҳтиётӣ лозим аст.',
  setPriv:'Махфият',
  privNote:'Содирот барои ёрдамчии зеҳни сунъӣ беном аст: ба ҷои ному насаб, телефон ва почта рамзи номзад содир мешавад. Мутобиқати рамз бо маълумоти шахсӣ танҳо дар ҳамин пойгоҳ мемонад.',
  footer:'Аз ҷониби Шуъбаи автоматикунонии холдинги ҶДММ «Авесто Гурух» таҳия шудааст · ISJ',
@@ -1487,12 +1511,21 @@ async function downloadResume(id, filename){
         // Авторизованный доступ через API
         url = `https://www.googleapis.com/drive/v3/files/${rec.gdFileId}?alt=media`;
         headers['Authorization'] = 'Bearer ' + GD_TOKEN;
+      } else if(GD_API_KEY){
+        // Без входа: файл открыт по ссылке, читаем по браузерному ключу API
+        url = `https://www.googleapis.com/drive/v3/files/${rec.gdFileId}?alt=media&key=${encodeURIComponent(GD_API_KEY)}`;
       } else {
-        // Публичный доступ (файл открыт для всех)
-        url = `https://drive.google.com/uc?export=download&id=${rec.gdFileId}`;
+        // Ключа нет — открываем файл в Drive отдельной вкладкой.
+        // Скачать его через fetch нельзя: drive.google.com не отдаёт CORS.
+        window.open(`https://drive.google.com/file/d/${rec.gdFileId}/view`, '_blank', 'noopener');
+        return;
       }
       const r = await fetch(url, {headers});
-      if(!r.ok) throw new Error('Ошибка Drive: HTTP ' + r.status);
+      if(!r.ok){
+        // Запасной путь — показать файл в Drive вместо ошибки
+        window.open(`https://drive.google.com/file/d/${rec.gdFileId}/view`, '_blank', 'noopener');
+        return;
+      }
       const blob = await r.blob();
       const objUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1662,6 +1695,7 @@ async function ingestFiles(input){
   loadKpis.innerHTML = kp
     .map(([n,l])=>`<div class="stat"><span class="num">${n}</span><span class="label">${esc(l)}</span></div>`).join('');
   refresh();
+  gdQueueSave();   // новые резюме сразу уходят в общую базу
 }
 function renderScans(){
   const s = DATA.filter(c=>c.scan);
@@ -1982,7 +2016,7 @@ async function fillFromFile(f){
   const box = document.getElementById('metaDrop'); if(box) box.textContent = 'Разбираем резюме…';
   try{
     await mergeResumeFile(c, f, null);
-    await dbPut([c]); DATA = await dbAll(); refresh();
+    await dbPut([c]); DATA = await dbAll(); refresh(); gdQueueSave();
     renderDetail();
     toast('✓ Карточка заполнена из резюме' + (c.scan ? ' — но в файле нет текстового слоя (скан)' : ''));
   }catch(e){ if(box) box.textContent = 'Не удалось прочитать файл: '+(e.message||e); }
@@ -2124,7 +2158,7 @@ async function saveCard(){
   c.relocation = v('edReloc')||null;
   c.category = v('edCat')||null;
   c.edited = Date.now();
-  await dbPut([c]); refresh(); renderDetail(); toast(T('saved'));
+  await dbPut([c]); refresh(); renderDetail(); gdQueueSave(); toast(T('saved'));
 }
 
 /* ============================================================
@@ -2602,18 +2636,39 @@ function exportJson(){ dl('baza_kandidatov_'+new Date().toISOString().slice(0,10
 /* ============================================================
    GOOGLE DRIVE СИНХРОНИЗАЦИЯ
    Хранит базу кандидатов в файле baza_kandidatov.json на Google Drive.
-   Рекрутер входит через OAuth и сохраняет/загружает.
-   Руководители могут загрузить по ID файла (публичный доступ).
+   Рекрутер входит через OAuth, база уходит в Drive автоматически.
+   Файл базы и файлы резюме открыты «для всех, у кого есть ссылка»,
+   поэтому коллеги видят базу с любого компьютера без входа в Google:
+   ID файла и браузерный ключ API передаются в адресе страницы (?db=…&k=…).
    ============================================================ */
 const GD_CLIENT_ID = '375321992202-rt4fdgg18beo468vk01edk4380okrtsm.apps.googleusercontent.com';
 const GD_SCOPES = 'https://www.googleapis.com/auth/drive.file';
 const GD_FILE_NAME = 'baza_kandidatov_avesto.json';
 const GD_FOLDER_NAME = 'Avesto HR Резюме';
+const GD_POLL_MS = 180000;   // как часто проверять обновления базы
+let GD_API_KEY = localStorage.getItem('avb_gd_key') || '';
+let GD_AUTO    = localStorage.getItem('avb_gd_auto') !== '0';
+let GD_STAMP   = null;       // отметка времени последней загруженной версии
+let GD_BUSY    = false;      // идёт сохранение — опрос не трогаем
+let GD_TIMER   = null;
 let GD_TOKEN = (()=>{ try{ const t=JSON.parse(sessionStorage.getItem('avb_gd_tok')||'null');
   return t && t.exp > Date.now()+60000 ? t.v : null; }catch(e){ return null; } })();
 function gdForgetToken(){ GD_TOKEN=null; try{ sessionStorage.removeItem('avb_gd_tok'); }catch(e){} }
 let GD_FILE_ID = localStorage.getItem('avb_gd_file') || null;
 let GD_FOLDER_ID = localStorage.getItem('avb_gd_folder') || null;
+
+// Открыть файл «для всех, у кого есть ссылка». Повторный вызов Google
+// отклоняет как дубликат — это не ошибка, поэтому молча игнорируем.
+async function gdMakePublic(fileId){
+  if(!GD_TOKEN || !fileId) return;
+  try{
+    await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`,{
+      method:'POST',
+      headers:{'Authorization':'Bearer '+GD_TOKEN,'Content-Type':'application/json'},
+      body: JSON.stringify({role:'reader', type:'anyone'})
+    });
+  }catch(e){ console.warn('gdMakePublic', e); }
+}
 
 // Найти или создать папку для резюме в Drive
 async function gdGetFolder(){
@@ -2740,6 +2795,13 @@ function gdUpdateButtons(){
   }
   const fi = document.getElementById('gdFileId');
   if(fi) fi.value = GD_FILE_ID||'';
+  const ak = document.getElementById('gdApiKey');
+  if(ak && !ak.value) ak.value = GD_API_KEY||'';
+  const ar = document.getElementById('gdAutoRow');
+  if(ar) ar.style.display = GD_TOKEN ? '' : 'none';
+  const au = document.getElementById('gdAuto');
+  if(au) au.checked = GD_AUTO;
+  gdRenderShare();
 }
 
 function gdSignIn(){
@@ -2769,14 +2831,23 @@ function gdCheckToken(){
   if(hash.get('access_token') && hash.get('state')==='gd_auth'){
     GD_TOKEN = hash.get('access_token');
     try{ sessionStorage.setItem('avb_gd_tok', JSON.stringify({v:GD_TOKEN, exp:Date.now()+(+hash.get('expires_in')||3600)*1000})); }catch(e){}
-    history.replaceState(null,'',location.pathname);
+    // Google возвращает нас на адрес без параметров — восстанавливаем ?db=…&k=…
+    let back = location.pathname;
+    try{
+      const prev = localStorage.getItem('avb_gd_return');
+      if(prev){ const u = new URL(prev); back = u.pathname + u.search; }
+    }catch(e){}
+    history.replaceState(null,'',back);
     gdSetStatus('✓ Вы вошли в Google. Теперь можно сохранить или загрузить базу.','ok');
     gdUpdateButtons();
   }
 }
-async function gdSaveDb(){
-  if(!GD_TOKEN){ toast('Сначала войдите в Google'); return; }
-  gdSetStatus('⏳ Сохранение базы в Google Drive…','');
+async function gdSaveDb(quiet){
+  if(!GD_TOKEN){ if(!quiet) toast('Сначала войдите в Google'); return false; }
+  if(GD_BUSY) return false;
+  GD_BUSY = true;
+  const stamp = new Date().toISOString();
+  if(!quiet) gdSetStatus('⏳ Сохранение базы в Google Drive…','');
   try{
     // Загружаем файлы резюме в Drive для кандидатов у которых ещё нет gdFileId
     const allRecs = await dbAll();
@@ -2795,7 +2866,7 @@ async function gdSaveDb(){
     // Экспортируем данные без бинарников (fileData не нужен — файлы в Drive)
     const exportData = freshData.map(c=>{ const {fileData,fileMime,...rest}=c; return rest; });
     const body = JSON.stringify({
-      exported: new Date().toISOString(),
+      exported: stamp,
       count: exportData.length,
       fav: FAV,
       candidates: exportData
@@ -2808,8 +2879,12 @@ async function gdSaveDb(){
         method:'PATCH', headers:{'Authorization':'Bearer '+GD_TOKEN,'Content-Type':'application/json'}, body: blob
       });
     } else {
-      // Создаём новый файл
-      const meta = JSON.stringify({name:GD_FILE_NAME, mimeType:'application/json'});
+      // Создаём новый файл — внутри общей папки, чтобы он лежал рядом с резюме
+      let parent = null;
+      try{ parent = await gdGetFolder(); }catch(e){}
+      const meta = JSON.stringify(parent
+        ? {name:GD_FILE_NAME, mimeType:'application/json', parents:[parent]}
+        : {name:GD_FILE_NAME, mimeType:'application/json'});
       const form = new FormData();
       form.append('metadata', new Blob([meta],{type:'application/json'}));
       form.append('file', blob);
@@ -2821,10 +2896,17 @@ async function gdSaveDb(){
     const j = await r.json();
     GD_FILE_ID = j.id;
     localStorage.setItem('avb_gd_file', GD_FILE_ID);
+    // Открываем файл базы «для всех, у кого есть ссылка» — иначе коллеги
+    // без входа в Google получат 403. Повторный вызов безвреден.
+    await gdMakePublic(GD_FILE_ID);
+    GD_STAMP = stamp;
     const fi = document.getElementById('gdFileId');
     if(fi) fi.value = GD_FILE_ID;
     const filesUploaded = freshData.filter(c=>c.gdFileId).length;
-    gdSetStatus(`✓ База сохранена (${exportData.length} кандидатов, ${filesUploaded} резюме в Drive). ID файла: <b>${GD_FILE_ID}</b><br><span style="font-size:11px;color:var(--muted)">Поделитесь этим ID с коллегами, чтобы они могли загрузить базу.</span>`,'ok');
+    gdRenderShare();
+    gdSetStatus(`✓ База сохранена (${exportData.length} кандидатов, ${filesUploaded} резюме в Drive).`
+      + (GD_API_KEY ? '<br><span style="font-size:11px;color:var(--muted)">Коллеги увидят изменения при следующем открытии ссылки.</span>'
+                    : '<br><span style="font-size:11px;color:var(--muted)">Чтобы коллеги открывали базу без входа в Google, впишите браузерный ключ API — раздел «Настройка доступа без входа» ниже.</span>'),'ok');
     toast('☁ База сохранена в Google Drive');
     DATA = freshData;
     return true;
@@ -2832,10 +2914,56 @@ async function gdSaveDb(){
     if(/401/.test(e.message)){ gdForgetToken(); gdSetStatus('✕ Вход в Google истёк (действует 1 час). Нажмите «Войти через Google» ещё раз.','err'); gdUpdateButtons(); }
     else gdSetStatus('✕ Ошибка сохранения: '+e.message,'err');
     return false;
+  } finally { GD_BUSY = false; }
+}
+
+/* ---------- автосохранение ---------- */
+let GD_SAVE_T = null;
+function gdSetAuto(on){
+  GD_AUTO = !!on;
+  localStorage.setItem('avb_gd_auto', GD_AUTO ? '1' : '0');
+  toast(GD_AUTO ? '☁ Автосохранение в Drive включено' : 'Автосохранение в Drive выключено');
+}
+// Вызывается после любого изменения базы. Сохраняет не сразу, а через паузу,
+// чтобы серия правок ушла в Drive одним разом.
+function gdQueueSave(){
+  if(!GD_AUTO || !GD_TOKEN) return;
+  clearTimeout(GD_SAVE_T);
+  GD_SAVE_T = setTimeout(async ()=>{
+    const ok = await gdSaveDb(true);
+    if(ok) toast('☁ База обновлена в Drive');
+  }, 5000);
+}
+
+/* ---------- чтение базы (с входом и без) ---------- */
+// Без входа в Google файл можно прочитать только по браузерному ключу API:
+// Drive отвечает 401 на безымянный запрос, а ссылка drive.google.com/uc
+// не отдаёт CORS-заголовки, поэтому fetch по ней не работает.
+async function gdFetchDb(fid){
+  if(GD_TOKEN){
+    const r = await fetch(`https://www.googleapis.com/drive/v3/files/${fid}?alt=media`,
+      {headers:{'Authorization':'Bearer '+GD_TOKEN}});
+    if(r.ok) return r.json();
+    if(r.status!==401 && r.status!==403) throw new Error('HTTP '+r.status+'. Проверьте ID файла.');
+    gdForgetToken(); gdUpdateButtons();
   }
+  if(!GD_API_KEY) throw new Error('Чтобы открыть базу без входа в Google, нужен браузерный ключ API — см. «Настройка доступа без входа». Либо войдите через Google.');
+  const r = await fetch(`https://www.googleapis.com/drive/v3/files/${fid}?alt=media&key=${encodeURIComponent(GD_API_KEY)}`);
+  if(r.status===401||r.status===403) throw new Error('Нет доступа к файлу. Попросите рекрутера нажать «Сохранить базу в Drive» — файл откроется по ссылке.');
+  if(r.status===404) throw new Error('Файл не найден. Проверьте ID файла базы.');
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  return r.json();
+}
+async function gdApplyDb(j){
+  if(!j.candidates || !Array.isArray(j.candidates)) throw new Error('Неверный формат файла.');
+  await dbPut(j.candidates);
+  DATA = await dbAll();
+  if(j.fav){ FAV = j.fav; LSS('avb_fav', FAV); }
+  GD_STAMP = j.exported || null;
+  refresh(); renderFav();
+  return j.candidates.length;
 }
 async function gdLoadDb(){
-  if(!GD_TOKEN){ toast('Сначала войдите в Google'); return; }
   if(!GD_FILE_ID){ toast('Сохраните базу сначала, чтобы получить ID файла'); return; }
   await gdLoadByFileId();
 }
@@ -2847,22 +2975,76 @@ async function gdLoadByFileId(){
   localStorage.setItem('avb_gd_file', fid);
   gdSetStatus('⏳ Загрузка базы из Google Drive…','');
   try{
-    const headers = {};
-    if(GD_TOKEN) headers['Authorization'] = 'Bearer '+GD_TOKEN;
-    const r = await fetch(`https://www.googleapis.com/drive/v3/files/${fid}?alt=media`, {headers});
-    if(r.status===401||r.status===403) throw new Error('Нет доступа к файлу. Войдите в Google или попросите рекрутера открыть доступ к файлу.');
-    if(!r.ok) throw new Error('HTTP '+r.status+'. Проверьте правильность ID файла.');
-    const j = await r.json();
-    if(!j.candidates || !Array.isArray(j.candidates)) throw new Error('Неверный формат файла.');
-    // Загружаем данные в IndexedDB
-    await dbPut(j.candidates);
-    DATA = await dbAll();
-    if(j.fav) { FAV = j.fav; LSS('avb_fav', FAV); }
-    refresh(); renderFav();
-    gdSetStatus(`✓ Загружено ${j.candidates.length} кандидатов (обновлено: ${j.exported ? new Date(j.exported).toLocaleString('ru') : '—'}).`,'ok');
-    toast(`☁ Загружено ${j.candidates.length} кандидатов из Drive`);
+    const j = await gdFetchDb(fid);
+    const n = await gdApplyDb(j);
+    gdRenderShare();
+    gdSetStatus(`✓ Загружено ${n} кандидатов (обновлено: ${j.exported ? new Date(j.exported).toLocaleString('ru') : '—'}).`,'ok');
+    toast(`☁ Загружено ${n} кандидатов из Drive`);
   }catch(e){
     gdSetStatus('✕ '+e.message,'err');
+  }
+}
+// Тихая проверка обновлений: подтягивает базу, если рекрутер её изменил.
+async function gdPoll(announce){
+  if(!GD_FILE_ID || GD_BUSY) return;
+  try{
+    const j = await gdFetchDb(GD_FILE_ID);
+    if(!announce && j.exported && GD_STAMP && j.exported === GD_STAMP) return;
+    const n = await gdApplyDb(j);
+    if(announce) toast(`☁ База обновлена: ${n} кандидатов`);
+  }catch(e){ if(announce) gdSetStatus('✕ '+e.message,'err'); }
+}
+async function gdRefreshNow(){
+  if(!GD_FILE_ID){ toast('ID файла базы не задан'); return; }
+  toast('⏳ Проверяем обновления…');
+  await gdPoll(true);
+}
+function gdArmPoll(){
+  clearInterval(GD_TIMER);
+  if(GD_FILE_ID) GD_TIMER = setInterval(()=>gdPoll(false), GD_POLL_MS);
+}
+
+/* ---------- ссылка для коллег ---------- */
+function gdShareLink(){
+  if(!GD_FILE_ID) return '';
+  const base = location.origin + location.pathname;
+  return base + '?db=' + encodeURIComponent(GD_FILE_ID)
+       + (GD_API_KEY ? '&k=' + encodeURIComponent(GD_API_KEY) : '');
+}
+function gdRenderShare(){
+  const box = document.getElementById('gdShareBox');
+  const inp = document.getElementById('gdShareLink');
+  if(!box || !inp) return;
+  const link = gdShareLink();
+  box.style.display = link ? '' : 'none';
+  inp.value = link;
+}
+function gdCopyLink(){
+  const inp = document.getElementById('gdShareLink');
+  if(!inp || !inp.value) return;
+  inp.select();
+  navigator.clipboard?.writeText(inp.value).then(()=>toast('Ссылка скопирована'), ()=>{ document.execCommand('copy'); toast('Ссылка скопирована'); });
+}
+function gdSaveApiKey(){
+  const el = document.getElementById('gdApiKey');
+  GD_API_KEY = (el?.value||'').trim();
+  localStorage.setItem('avb_gd_key', GD_API_KEY);
+  gdRenderShare();
+  toast(GD_API_KEY ? 'Ключ API сохранён' : 'Ключ API удалён');
+}
+
+/* ---------- старт: подхватываем базу из адреса страницы ---------- */
+async function gdBoot(){
+  const p = new URLSearchParams(location.search);
+  const urlDb = p.get('db'), urlKey = p.get('k');
+  if(urlDb){ GD_FILE_ID = urlDb.trim(); localStorage.setItem('avb_gd_file', GD_FILE_ID); }
+  if(urlKey){ GD_API_KEY = urlKey.trim(); localStorage.setItem('avb_gd_key', GD_API_KEY); }
+  const fi = document.getElementById('gdFileId'); if(fi) fi.value = GD_FILE_ID||'';
+  const ak = document.getElementById('gdApiKey'); if(ak) ak.value = GD_API_KEY||'';
+  gdRenderShare();
+  if(GD_FILE_ID){
+    await gdPoll(false);
+    gdArmPoll();
   }
 }
 
@@ -3123,7 +3305,7 @@ async function setVerdict(id, v){
   c.verdict = c.verdict===v ? null : v;
   if(c.verdict==='fit' && (c.status==='new'||!c.status)) c.status='work';
   if(c.verdict==='unfit') c.status='reject';
-  await dbPut([c]); refresh();
+  await dbPut([c]); refresh(); gdQueueSave();
   if(OPEN_ID===id) renderDetail(); else if(LAST_SHORT.length) runMatch();
   // При «Подходит» — добавить в папку Избранного по должности; при отмене — убрать
   if(c.verdict==='fit'){
@@ -3310,6 +3492,7 @@ impIn.addEventListener('change', async e=>{
   bxFolder.value = localStorage.getItem('avb_folder') || '';
   bxPathShow(); bxFolder.addEventListener('input', bxPathShow); hookHint();
   setLang(LANG); refresh(); armSync(); renderMe(); go('match');
+  gdBoot();   // подтянуть общую базу из Drive (ID берём из ?db=… или из памяти браузера)
 })();
 
 /* экспорт для автотестов */

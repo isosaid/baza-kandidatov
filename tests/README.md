@@ -17,6 +17,13 @@ node test_features.js               # категории, пол, zip, избр�
 node test_storages.js               # поиск личного диска на портале с сотнями хранилищ
 ```
 
+Проверка общей базы в Drive идёт без Chromium — на jsdom:
+
+```bash
+npm install jsdom fake-indexeddb
+node tests/test_gdrive.js           # сохранение в Drive, ссылка для коллег, опрос обновлений
+```
+
 `mk_resumes.py` требует `reportlab` и `python-docx`, а также шрифт
 DejaVu Sans (в Debian/Ubuntu — пакет `fonts-dejavu`).
 
