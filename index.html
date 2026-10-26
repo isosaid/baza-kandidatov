@@ -483,6 +483,7 @@ td .mut{color:var(--muted);font-size:12px}
 
     <div class="row" style="margin-top:16px">
       <button class="btn btn-line" onclick="bxTest()"><span data-i="bxTest">Проверить связь</span></button>
+      <button class="btn btn-line" onclick="bxTestDownload()">Проверить скачивание</button>
       <button class="btn btn-primary" onclick="bxSync()"><span data-i="bxSync">Синхронизировать папку</span></button>
       <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink-soft)">
         <input type="checkbox" id="bxDeep" checked> <span data-i="bxDeepLbl">включая вложенные папки</span></label>
@@ -2439,6 +2440,33 @@ function bxMetaRecord(f){
   c.category = pickCategory('', f.folder||'', []);
   c.meta = true; c.scan = false; c.bxPersonDir = f.personDir || null;
   return c;
+}
+/* Быстрая проверка: найти первое резюме в выбранной папке и попробовать его скачать */
+async function bxTestDownload(){
+  document.getElementById('bxLog').innerHTML='';
+  const root = bxFolder.value.trim();
+  if(!root){ bxLog('⚠ Сначала выберите папку с резюме («Выбрать на Диске»).','w'); return; }
+  bxLog('… ищем первое резюме в папке');
+  let found = null, seen = 0;
+  async function find(id, path, depth){
+    if(found || depth>8 || seen>300) return;
+    seen++;
+    const items = await bxChildren(id);
+    const f = items.find(i=>i.TYPE!=='folder' && /\.(pdf|docx|doc|txt|rtf)$/i.test(i.NAME));
+    if(f){ found = {...f, path}; return; }
+    for(const it of items.filter(i=>i.TYPE==='folder')){ await find(it.ID, [...path, it.NAME], depth+1); if(found) return; }
+  }
+  try{
+    await find(root, [], 0);
+    if(!found){ bxLog('✕ В папке не найдено ни одного резюме (PDF, DOCX, DOC, RTF, TXT).','e'); return; }
+    bxLog('… пробуем скачать: '+esc([...found.path, found.NAME].join(' / ')));
+    const t0 = Date.now();
+    const blob = await bxFetchFile(found);
+    bxLog('✓ Скачивание работает: '+esc(found.NAME)+' — '+Math.round(blob.size/1024)+' КБ за '+((Date.now()-t0)/1000).toFixed(1)+' с. Можно запускать «Синхронизировать папку».','ok');
+  }catch(e){
+    bxLog('✕ '+esc(e.message),'e');
+    if(e.kind==='net') bxLog('Сервер всё ещё не разрешает скачивание с сайта платформы. Если настройку только что меняли — проверьте, что nginx перезагружен, и обновите эту страницу (Ctrl+Shift+R).','w');
+  }
 }
 async function bxSync(){
   document.getElementById('bxLog').innerHTML=''; bxProg.style.display='block'; bxProg.firstElementChild.style.width='0%';
