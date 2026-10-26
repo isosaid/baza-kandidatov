@@ -2242,6 +2242,8 @@ async function bxBrowse(){
     const items = [];
     let me = null;
     try{ me = await bxCall('user.current',{}); }catch(e){}
+    // у вебхука только право «Диск» — номер владельца берём из самой ссылки /rest/<номер>/<ключ>/
+    if(!me){ const m = (bxHook.value||'').match(/\/rest\/(\d+)\//); if(m) me = {ID:m[1]}; }
     // Ответ на фильтр обязательно перепроверяем: часть порталов фильтр
     // игнорирует и молча отдаёт первые 50 хранилищ подряд.
     const isMine   = x => x.ENTITY_TYPE==='user'   && me && String(x.ENTITY_ID)===String(me.ID);
