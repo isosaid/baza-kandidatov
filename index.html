@@ -1502,6 +1502,7 @@ async function downloadResume(id, filename){
       setTimeout(()=>URL.revokeObjectURL(objUrl), 5000);
       return;
     }
+    if(rec.url){ window.open(rec.url, '_blank', 'noopener'); return; }   // файл в Битрикс24
     toast('⚠ Резюме недоступно. Рекрутер должен загрузить файлы в Google Drive.');
   } catch(e){
     toast('Ошибка скачивания: ' + e.message);
@@ -1571,6 +1572,7 @@ async function expandZips(files){
   await LIBS_READY;
   if(!LIBS.zip){ log('\u2715 '+T('zipNoLib'),'e'); return out; }
   for(const z of zips){
+    if(z.size > 400*1048576) log('\u26a0 '+esc(z.name)+' — '+Math.round(z.size/1048576)+' МБ. Такой архив браузер открывает целиком в памяти и может не справиться. Надёжнее распаковать его на компьютере (правая кнопка → «Извлечь всё») и перетащить сюда распакованную папку.','w');
     log('\u2026 '+esc(z.name)+' — '+T('zipOpen'));
     let arch;
     try{ arch = await JSZip.loadAsync(await z.arrayBuffer()); }
@@ -1592,9 +1594,10 @@ async function expandZips(files){
 async function mergeResumeFile(rec, f, folder){
   const buf = await f.arrayBuffer();
   const txt = await readFileText(new File([buf], f.name, {lastModified: f.lastModified||Date.now()}));
-  const b64 = await blobToDataUrl(new Blob([buf], {type: f.type||mimeByName(f.name)}));
+  const b64 = (rec.source==='bitrix' && rec.url) ? null : await blobToDataUrl(new Blob([buf], {type: f.type||mimeByName(f.name)}));
+  const keepCopy = !(rec.source==='bitrix' && rec.url);   // у резюме из Битрикс24 файл открывается по ссылке
   const full = parseResume(txt,{id:rec.id,file:f.name,folder:folder||rec.folder,size:f.size,source:rec.source||'local',url:rec.url,
-    mtime:rec.applied,fileData:b64,fileMime:f.type||mimeByName(f.name)});
+    mtime:rec.applied,fileData:keepCopy?b64:null,fileMime:f.type||mimeByName(f.name)});
   Object.assign(rec, full, {name: full.name||rec.name, status: rec.status, verdict: rec.verdict,
     added: rec.added, applied: rec.applied||full.applied, bxPersonDir: rec.bxPersonDir||null, meta:false, gdFileId:null});
   return rec;
@@ -1606,7 +1609,7 @@ async function ingestFiles(input){
   if(!list.length){ log('✕ '+T('noFiles'),'e'); return; }
   setProg(0);
   const existing = new Set(DATA.map(c=>c.id));
-  const fresh=[]; let dupes=0, enriched=0; const fixed=[];
+  const fresh=[]; let dupes=0, enriched=0, savedFresh=0, scanCnt=0; const fixed=[];
   for(let i=0;i<list.length;i++){
     const f = list[i];
     const relPath = f.webkitRelativePath || '';
@@ -1623,7 +1626,9 @@ async function ingestFiles(input){
         fixed.push(metaHit); enriched++;
         log('✓ '+esc(f.name)+' — дополнен: '+esc(metaHit.name||T('noName')),'ok');
       }catch(e){ log('✕ '+esc(f.name)+' — '+esc(e.message||'ошибка чтения'),'e'); }
-      setProg((i+1)/list.length); continue;
+      setProg((i+1)/list.length);
+      if(fixed.length>=100){ await dbPut(fixed.splice(0)); }
+      continue;
     }
     if(existing.has(id)){
       dupes++;
@@ -1637,7 +1642,8 @@ async function ingestFiles(input){
       const txt = await readFileText(new File([buf], f.name, {lastModified: f.lastModified||Date.now()}));
       const b64 = await new Promise(r=>{ const rd=new FileReader(); rd.onload=e=>r(e.target.result); rd.readAsDataURL(new Blob([buf])); });
       const c = parseResume(txt,{id,file:f.name,folder,size:f.size,source:'local',mtime:f.lastModified||null,fileData:b64,fileMime:f.type||'application/octet-stream'});
-      fresh.push(c); existing.add(id);
+      fresh.push(c); existing.add(id); if(c.scan) scanCnt++;
+      if(fresh.length>=100){ await dbPut(fresh); savedFresh += fresh.length; fresh.length = 0; }
       log((c.scan?'⚠ ':'✓ ')+esc(f.name)+(c.scan?' — '+T('noLayer'):' — '+(c.name||T('noName'))+(c.skills.length?' · '+T('skCnt')+': '+c.skills.length:'')), c.scan?'w':'ok');
     }catch(e){ log('✕ '+esc(f.name)+' — '+esc(e.message||'ошибка чтения'),'e'); }
     setProg((i+1)/list.length);
@@ -1650,7 +1656,10 @@ async function ingestFiles(input){
   else if(fixed.length) toast('📁 Папка вакансии исправлена у ' + fixed.length + ' кандидатов');
   setProg(null);
   loadKpis.style.display='grid';
-  loadKpis.innerHTML = [[list.length,T('total')],[fresh.length,T('parsed')],[fresh.filter(c=>c.scan).length,T('scans')],[dupes,T('dupes')]]
+  const kp = [[list.length,T('total')],[savedFresh+fresh.length,T('parsed')]];
+  if(enriched) kp.push([enriched,'дополнено из Битрикс24']);
+  kp.push([scanCnt,T('scans')],[dupes,T('dupes')]);
+  loadKpis.innerHTML = kp
     .map(([n,l])=>`<div class="stat"><span class="num">${n}</span><span class="label">${esc(l)}</span></div>`).join('');
   refresh();
 }
@@ -3275,7 +3284,13 @@ function walkEntry(entry, path, out){
     if(entry.isFile){ entry.file(f=>{ try{Object.defineProperty(f,'webkitRelativePath',{value:path+f.name})}catch(e){} out.push(f); res(); }, ()=>res()); }
     else if(entry.isDirectory){
       const rd = entry.createReader();
-      rd.readEntries(async ents=>{ for(const e of ents) await walkEntry(e, path+entry.name+'/', out); res(); }, ()=>res());
+      // Chrome отдаёт содержимое папки порциями по 100 — читаем, пока не вернёт пусто
+      const next = ()=> rd.readEntries(async ents=>{
+        if(!ents.length) return res();
+        for(const e of ents) await walkEntry(e, path+entry.name+'/', out);
+        next();
+      }, ()=>res());
+      next();
     } else res();
   });
 }
