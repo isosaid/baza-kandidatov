@@ -1383,14 +1383,19 @@ function cleanPos(s){
 /* ============================================================
    ВЕСА И ПОДБОР
    ============================================================ */
-const W_DEFAULT = { pos:15, exp:25, must:25, nice:15, edu:8, city:7, lang:5 };
-const W_ORDER = ['pos','exp','must','nice','edu','city','lang'];
-const W_LABEL = {pos:'wPos',exp:'wExp',must:'wMust',nice:'wNice',edu:'wEdu',city:'wCity',lang:'wLang'};
+/* Город из расчёта убран (решение 28.10.2026): его 7 баллов отданы соответствию должности. */
+const W_DEFAULT = { pos:22, exp:25, must:25, nice:15, edu:8, lang:5 };
+const W_ORDER = ['pos','exp','must','nice','edu','lang'];
+const W_LABEL = {pos:'wPos',exp:'wExp',must:'wMust',nice:'wNice',edu:'wEdu',lang:'wLang'};
 let W = loadWeights();
 function loadWeights(){
   try{
     const s = JSON.parse(localStorage.getItem('avb_weights')||'null');
-    if(s && W_ORDER.every(k=>typeof s[k]==='number')) return s;
+    if(s && typeof s.city==='number'){            // сохранённые раньше веса: город → к должности
+      s.pos = (+s.pos||0) + s.city; delete s.city;
+      localStorage.setItem('avb_weights', JSON.stringify(s));
+    }
+    if(s && W_ORDER.every(k=>typeof s[k]==='number')){ const w={}; W_ORDER.forEach(k=>w[k]=s[k]); return w; }
   }catch(e){}
   return {...W_DEFAULT};
 }
@@ -1428,8 +1433,8 @@ function scoreCandidate(c, crit){
     else { add('edu',0); miss.push(T('eduLow')); }
   }
   if(crit.city){
+    // город на процент не влияет — только подсказка в карточке
     const ok = c.city && norm(c.city)===norm(crit.city);
-    add('city', ok?1:0);
     if(ok) why.push(T('cityOk')); else miss.push(crit.city);
   }
   if(crit.lang){
