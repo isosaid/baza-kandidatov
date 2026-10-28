@@ -422,6 +422,8 @@ td .mut{color:var(--muted);font-size:12px}
       </div>
       <input type="file" id="fIn" multiple hidden accept=".pdf,.docx,.doc,.txt,.rtf,.zip">
       <input type="file" id="dIn" webkitdirectory directory multiple hidden>
+      <div class="small" style="margin-top:12px">Название файла по шаблону <b>CV_Фамилия Имя_Дата подачи_Организация</b> — например
+        <code>CV_Султонова Мунзифа_28.10.2026_Авесто Групп.pdf</code>: ФИО, дата подачи и организация возьмутся из названия.</div>
     </div>
     <div class="prog" id="prog" style="display:none"><i></i></div>
     <div id="logBox" style="display:none;margin-top:14px"><div class="log" id="log"></div></div>
@@ -1195,10 +1197,26 @@ function personFromDir(dir){
   const t = new Date(+m[4], +m[3]-1, +m[2], +(m[5]||0), +(m[6]||0), +(m[7]||0)).getTime();
   return {name: name || null, applied: isNaN(t) ? null : t};
 }
+/* Шаблон названия файла: «CV_Фамилия Имя_Дата подачи_Организация.pdf»
+   Разделитель — «_», дата 28.10.2026 (или 28-10-2026), организация необязательна. */
+function parseFileTemplate(fn){
+  const base = String(fn||'').replace(/(\.(pdf|docx?|rtf|txt|odt))+$/i,'').trim();
+  const m = base.match(/^(?:cv|резюме|rezume|resume)\s*[_\-]\s*(.+?)\s*_\s*(\d{1,2})[.\-\/](\d{1,2})[.\-\/](\d{2,4})\s*(?:_\s*(.*))?$/i);
+  if(!m) return null;
+  const name = m[1].replace(/_+/g,' ').replace(/\s+/g,' ').trim();
+  const y = m[4].length===2 ? 2000 + +m[4] : +m[4];
+  const t = new Date(y, +m[3]-1, +m[2]).getTime();
+  const org = (m[5]||'').replace(/_+/g,' ').replace(/\s+/g,' ').trim();
+  if(name.length<3) return null;
+  return {name, applied: isNaN(t)?null:t, org: org||null};
+}
 /* Имя из названия файла, если подпапки кандидата нет: «Резюме_Холова_К..pdf» → «Холова К» */
 function nameFromFile(fn){
-  const STOP = new Set(['резюме','resume','cv','rezume','curriculum','vitae','от','new','копия','copy','doc','inbound']);
-  const n = String(fn||'').replace(/\.[a-z0-9]{2,4}$/i,'').replace(/\(\d+\)/g,' ')
+  const tpl = parseFileTemplate(fn); if(tpl) return tpl.name;
+  const STOP = new Set(['резюме','resume','cv','rezume','curriculum','vitae','от','new','копия','copy','doc','inbound',
+    'обновленное','обновлённое','обновленный','обновлённый','новое','новый','последнее','последний','итог','итоговое','финал','final',
+    'updated','update','version','версия','ru','en','rus','eng','tj','на','русском','английском','таджикском']);
+  const n = String(fn||'').replace(/(\.(pdf|docx?|rtf|txt|odt))+$/i,'').replace(/\.[a-z0-9]{2,4}$/i,'').replace(/\(\d+\)/g,' ')
     .split(/[\s_\-–—.,]+/).filter(w=>w && !STOP.has(w.toLowerCase()) && !/\d/.test(w)).join(' ').trim();
   return n.length>=3 ? n : null;
 }
@@ -1293,7 +1311,7 @@ function parseResume(text, meta){
   const birth = pickBirth(raw);
   const out = {
     id: meta.id,
-    name: pickName(raw, meta.file) || null,
+    name: (parseFileTemplate(meta.file)||{}).name || pickName(raw, meta.file) || nameFromFile(meta.file) || null,
     position: pickPosition(raw, meta.folder),
     folder: meta.folder || null,
     phone: phones[0] || null, phones,
@@ -1317,6 +1335,8 @@ function parseResume(text, meta){
     fileData: meta.fileData || null,
     fileMime: meta.fileMime || null
   };
+  const tpl = parseFileTemplate(meta.file);
+  if(tpl){ if(tpl.applied) out.applied = tpl.applied; out.org = tpl.org; }
   out.gender = pickGender(out.name);
   out.category = pickCategory(raw, out.position, out.skills);
   out.relocation = pickRelocation(raw);
@@ -1754,7 +1774,7 @@ function setCat(c){ CAT_FILTER = CAT_FILTER===c ? '' : c; PAGE=50; renderBase();
 
 function matchQuery(c,q){
   if(!q) return true;
-  const hay = norm([c.name,c.position,c.folder,c.city,c.email,c.phone,c.lastJob,(c.skills||[]).join(' '),(c.langs||[]).join(' '),c.raw].join(' '));
+  const hay = norm([c.name,c.position,c.folder,c.org,c.city,c.email,c.phone,c.lastJob,(c.skills||[]).join(' '),(c.langs||[]).join(' '),c.raw].join(' '));
   return norm(q).split(' ').filter(Boolean).every(w=>hay.includes(w));
 }
 function currentFiltered(){
@@ -1783,7 +1803,7 @@ function renderBase(){
    return `<tr class="clk" onclick="openD(${jsArg(c.id)})">
      <td><div class="nm">${esc(c.name||'—')}</div><div class="mut">${c.meta?'<span style="color:var(--warn)">без разбора · </span>':''}${esc(c.phone||c.email||c.file)}</div></td>
      <td>${c.category?`<span class="pill">${esc(c.category)}</span>`:'<span class="mut">—</span>'}</td>
-     <td>${esc(posOf(c)||'—')}</td>
+     <td>${esc(posOf(c)||'—')}${c.org?`<div class="mut">${esc(c.org)}</div>`:''}</td>
      <td>${c.exp!=null?c.exp+' '+esc(T('yrs')):'<span class="mut">—</span>'}</td>
      <td>${esc(c.city||'—')}</td>
      <td class="num" style="font-weight:400">${esc(fmtDate(c.applied))}</td>
@@ -2035,7 +2055,7 @@ function renderDetail(){
   <div class="detail-header">
     <div>
       <h2>${esc(c.name||c.file)}</h2>
-      <div class="sub">${esc([posOf(c), c.city, c.exp!=null?c.exp+' '+T('yrs'):null].filter(Boolean).join(' · '))}</div>
+      <div class="sub">${esc([posOf(c), c.org, c.city, c.exp!=null?c.exp+' '+T('yrs'):null].filter(Boolean).join(' · '))}</div>
       <div class="file-badges">
         <span class="file-badge">${esc(c.file)}</span>
         <span class="file-badge">${esc(T('source'))}: ${c.source==='bitrix'?'Битрикс24':esc(T('local'))}</span>
@@ -2057,6 +2077,7 @@ function renderDetail(){
         <div class="grid g2">
           <div class="field"><label>${esc(T('cName'))}</label><input class="inp" id="edName" value="${esc(c.name||'')}"></div>
           <div class="field"><label>${esc(T('cPosition'))}</label><input class="inp" id="edPos" value="${esc(posOf(c)||'')}"></div>
+          <div class="field"><label>Организация</label><input class="inp" id="edOrg" value="${esc(c.org||'')}" placeholder="в какую компанию подан"></div>
           <div class="field"><label>${esc(T('phone'))}</label><input class="inp" id="edPhone" value="${esc(c.phone||'')}"></div>
           <div class="field"><label>${esc(T('email'))}</label><input class="inp" id="edMail" value="${esc(c.email||'')}"></div>
           <div class="field"><label>${esc(T('cCityT'))}</label><input class="inp" id="edCity" value="${esc(c.city||'')}"></div>
@@ -2144,7 +2165,7 @@ function renderDetail(){
 async function saveCard(){
   const c = DATA.find(x=>x.id===OPEN_ID); if(!c) return;
   const v = id => (document.getElementById(id)?.value||'').trim();
-  c.name = v('edName')||null; c.position = v('edPos')||null;
+  c.name = v('edName')||null; c.position = v('edPos')||null; c.org = v('edOrg')||null;
   c.phone = v('edPhone')||null;
   c.phones = c.phones||[]; if(c.phone && !c.phones.includes(c.phone)) c.phones=[c.phone,...c.phones];
   c.email = v('edMail')||null; c.city = v('edCity')||null;
@@ -2625,9 +2646,9 @@ function dl(name, text, type){
 }
 function exportCsv(){
   const rows = currentFiltered();
-  const H = ['ФИО','Позиция','Папка','Телефон','Почта','Город','Год рождения','Опыт (лет)','Образование','Языки','Навыки','Статус','Файл'];
+  const H = ['ФИО','Позиция','Папка','Организация','Телефон','Почта','Город','Год рождения','Опыт (лет)','Образование','Языки','Навыки','Статус','Файл'];
   const q = s => '"'+String(s??'').replace(/"/g,'""')+'"';
-  const csv = '﻿'+[H.map(q).join(';')].concat(rows.map(c=>[c.name,c.position,c.folder,c.phone,c.email,c.city,c.birth,
+  const csv = '﻿'+[H.map(q).join(';')].concat(rows.map(c=>[c.name,c.position,c.folder,c.org,c.phone,c.email,c.city,c.birth,
     c.exp,c.edu?EDU_NAME[c.edu].ru:'',(c.langs||[]).join(', '),(c.skills||[]).join(', '),STATUS[c.status||'new'].ru,c.file].map(q).join(';'))).join('\n');
   dl('kandidaty_'+new Date().toISOString().slice(0,10)+'.csv', csv, 'text/csv;charset=utf-8');
 }
@@ -3487,6 +3508,15 @@ impIn.addEventListener('change', async e=>{
 /* старт */
 (async function(){
   await openDb(); DATA = await dbAll();
+  { const upd = [];
+    for(const c of DATA){
+      const tpl = parseFileTemplate(c.file); let ch = false;
+      if(!c.name){ const n = nameFromFile(c.file); if(n){ c.name = n; c.gender = c.gender || pickGender(n); ch = true; } }
+      if(tpl && tpl.org && !c.org){ c.org = tpl.org; ch = true; }
+      if(tpl && tpl.applied && !c.applied){ c.applied = tpl.applied; ch = true; }
+      if(ch) upd.push(c);
+    }
+    if(upd.length) await dbPut(upd); }
   skDict.value = localStorage.getItem('avb_skills') || DEFAULT_SKILLS;
   bxHook.value = localStorage.getItem('avb_hook') || '';
   bxFolder.value = localStorage.getItem('avb_folder') || '';
