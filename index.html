@@ -1210,6 +1210,18 @@ function parseFileTemplate(fn){
   if(name.length<3) return null;
   return {name, applied: isNaN(t)?null:t, org: org||null};
 }
+/* Название резюме по шаблону «CV_Фамилия Имя_Дата подачи_Организация.расширение».
+   Пустые части пропускаются; без ФИО — исходное название файла. */
+function cvName(c, withExt=true){
+  if(!c) return 'resume';
+  if(!c.name) return c.file || 'resume';
+  const clean = v => String(v||'').replace(/[_\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim();
+  const t = c.applied || c.added;
+  const d = t ? new Date(t) : null;
+  const date = d && !isNaN(d) ? String(d.getDate()).padStart(2,'0')+'.'+String(d.getMonth()+1).padStart(2,'0')+'.'+d.getFullYear() : '';
+  const ext = ((c.file||'').match(/\.(pdf|docx?|rtf|txt|odt)$/i)||[''])[0].toLowerCase();
+  return ['CV', clean(c.name), date, clean(c.org)].filter(Boolean).join('_') + (withExt ? ext : '');
+}
 /* Имя из названия файла, если подпапки кандидата нет: «Резюме_Холова_К..pdf» → «Холова К» */
 function nameFromFile(fn){
   const tpl = parseFileTemplate(fn); if(tpl) return tpl.name;
@@ -1522,10 +1534,14 @@ async function downloadResume(id, filename){
     if(!rec){ toast('Файл не найден в базе. Попробуйте загрузить резюме заново.'); return; }
     // Если есть локальный файл — скачиваем напрямую
     if(rec.fileData){
+      // через Blob: у data:-ссылки Chrome иногда игнорирует имя файла
+      const blob = await (await fetch(rec.fileData)).blob();
+      const objUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = rec.fileData;
-      a.download = filename || rec.file || 'resume';
+      a.href = objUrl;
+      a.download = filename || cvName(rec);
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(()=>URL.revokeObjectURL(objUrl), 5000);
       return;
     }
     // Если файл в Google Drive — скачиваем оттуда
@@ -1555,7 +1571,7 @@ async function downloadResume(id, filename){
       const objUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = objUrl;
-      a.download = filename || rec.file || 'resume';
+      a.download = filename || cvName(rec);
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       setTimeout(()=>URL.revokeObjectURL(objUrl), 5000);
       return;
@@ -1725,7 +1741,7 @@ async function ingestFiles(input){
 function renderScans(){
   const s = DATA.filter(c=>c.scan);
   scanCard.style.display = s.length?'block':'none';
-  scanList.innerHTML = s.map(c=>`<span class="pill warn" style="cursor:pointer" onclick="openD(${jsArg(c.id)})">${esc(c.file)}</span>`).join('');
+  scanList.innerHTML = s.map(c=>`<span class="pill warn" style="cursor:pointer" onclick="openD(${jsArg(c.id)})">${esc(cvName(c))}</span>`).join('');
 }
 
 /* ============================================================
@@ -1966,7 +1982,7 @@ function candCard(s,i){
    <div class="cand-top">
      <div class="dial" data-pct="${s.score}" data-color="${cls}"></div>
      <div class="cand-main">
-       <div class="cand-name">${esc(c.name||c.file)}</div>
+       <div class="cand-name">${esc(c.name||cvName(c))}</div>
        <div class="cand-role">${esc(role)}</div>
        <div class="cand-tags">${(c.skills||[]).slice(0,6).map(k=>`<span class="pill">${esc(k)}</span>`).join('')}</div>
        <div class="cand-checks">
@@ -2059,10 +2075,10 @@ function renderDetail(){
   <button class="btn btn-ghost btn-sm" style="margin-bottom:14px" onclick="go('${BACK_TO}')">← ${esc(BACK_TO==='match'?T('backRes'):T('backBase'))}</button>
   <div class="detail-header">
     <div>
-      <h2>${esc(c.name||c.file)}</h2>
+      <h2>${esc(c.name||cvName(c))}</h2>
       <div class="sub">${esc([posOf(c), c.org, c.city, c.exp!=null?c.exp+' '+T('yrs'):null].filter(Boolean).join(' · '))}</div>
       <div class="file-badges">
-        <span class="file-badge">${esc(c.file)}</span>
+        <span class="file-badge" title="Исходный файл: ${esc(c.file||'')}">${esc(cvName(c))}</span>
         <span class="file-badge">${esc(T('source'))}: ${c.source==='bitrix'?'Битрикс24':esc(T('local'))}</span>
         ${c.scan?`<span class="file-badge" style="color:var(--warn);border-color:#EDDCC2">${esc(T('noText'))}</span>`:''}
         ${c.meta?`<span class="file-badge" style="color:var(--warn);border-color:#EDDCC2">только по названию папки — резюме не разобрано</span>`:''}
@@ -2071,7 +2087,7 @@ function renderDetail(){
     </div>
     <div class="row">
       ${c.url?`<a class="btn btn-line" href="${esc(c.url)}" target="_blank" rel="noopener">${esc(T('openFile'))}</a>`:''}
-      ${c.source==='local'?`<button class="btn btn-line" onclick="downloadResume(${jsArg(c.id)},${jsArg(c.file||c.id)})">⬇ Скачать резюме</button>`:''}
+      ${(c.source==='local'||c.url||c.fileData||c.gdFileId)?`<button class="btn btn-line" onclick="downloadResume(${jsArg(c.id)},${jsArg(cvName(c))})">⬇ Скачать резюме</button>`:''}
     </div>
   </div>
 
@@ -2120,7 +2136,7 @@ function renderDetail(){
         <h3>${esc(T('twoLayers'))}</h3>
         <div class="grid g2">
           <div><div class="hint">${esc(T('layerOrig'))}</div>
-            <div style="margin-top:4px">${c.url?`<a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.file)}</a>`:esc(c.file)}</div>
+            <div style="margin-top:4px">${c.url?`<a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(cvName(c))}</a>`:esc(cvName(c))}</div>
             <div class="hint" style="margin-top:4px">${esc(T('layerOrigV'))}</div></div>
           <div><div class="hint">${esc(T('layerText'))}</div>
             <div style="margin-top:4px" class="num">${c.chars||0} ${LANG==='tj'?'аломат':'символов'}</div>
@@ -2761,7 +2777,7 @@ async function gdUploadResume(id){
     for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
     const blob = new Blob([arr],{type:mime});
     const folderId = await gdGetSubfolder(posOf(rec) || rec.category || 'Без вакансии');
-    const fname = (rec.name ? rec.name+' — ' : '') + (rec.file || (id+'.pdf'));
+    const fname = cvName(rec) || (id+'.pdf');
     // Проверяем, не загружен ли уже (по gdFileId в записи)
     if(rec.gdFileId){
       // Обновляем файл
