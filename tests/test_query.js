@@ -20,6 +20,7 @@ const CASES = [
 (async () => {
   const b = await chromium.launch();
   const p = await b.newPage();
+  await require('./_login').loggedIn(p);
   await p.goto('file://' + path.join(__dirname, '..', 'index.html'));
   await p.waitForFunction(() => window.AVB, { timeout: 30000 });
   let ok = 0, total = 0;

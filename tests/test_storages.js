@@ -24,6 +24,7 @@ async function run(supportsFilter) {
   const p = await b.newPage();
   const errs = [];
   p.on('pageerror', e => errs.push(e.message));
+  await require('./_login').loggedIn(p);
   await p.goto('file://' + path.join(__dirname, '..', 'index.html'));
   await p.waitForFunction(() => window.AVB, { timeout: 30000 });
   await p.evaluate(({ all, child, me, sf }) => {

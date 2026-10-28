@@ -38,6 +38,7 @@ const RELOC = [
   const p = await b.newPage({ viewport: { width: 1400, height: 1000 } });
   const errs = [];
   p.on('pageerror', e => errs.push(e.message));
+  await require('./_login').loggedIn(p);
   await p.goto(APP);
   await p.waitForFunction(() => window.AVB && window.JSZip, { timeout: 40000 });
 

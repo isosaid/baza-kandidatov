@@ -14,6 +14,7 @@ node test_edge.js                   # ловушки и ложные сраба�
 node test_query.js                  # разбор свободного описания вакансии
 node test_bitrix.js                 # обозреватель Диска и синхронизация
 node test_features.js               # категории, пол, zip, избранное, фильтры
+node test_login.js                  # вход: пароль, «Выйти», пауза после ошибок
 node test_storages.js               # поиск личного диска на портале с сотнями хранилищ
 ```
 

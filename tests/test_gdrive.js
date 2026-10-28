@@ -112,6 +112,7 @@ async function boot({ search = '', store = {}, drive }){
   w.IDBKeyRange = fidb.IDBKeyRange;
   // localStorage с заранее положенными значениями
   for (const [k, v] of Object.entries(store)) w.localStorage.setItem(k, v);
+  require('./_login').loggedInWindow(w);   // вход уже выполнен
 
   // FormData, пригодная для разбора в поддельном Drive
   class FD { constructor(){ this._parts = []; } append(k, v){ this._parts.push([k, v]); } }

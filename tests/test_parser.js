@@ -25,6 +25,7 @@ function eqName(a, b) {
   page.on('console', m => { if (m.type() === 'error') errors.push('CONSOLE: ' + m.text()); });
 
   // CDN в контейнере недоступен — проверяем встроенный запасной путь lib/
+  await require('./_login').loggedIn(page);
   await page.goto(APP);
   await page.waitForFunction(() => window.AVB && window.pdfjsLib && window.mammoth, { timeout: 60000 });
   console.log('Библиотеки подняты из локальной папки lib/ (CDN недоступен) — запасной путь работает.');

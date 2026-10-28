@@ -230,9 +230,33 @@ td .mut{color:var(--muted);font-size:12px}
   .cand-card{break-inside:avoid;border-color:#bbb}
   body{background:#fff}
 }
+/* вход */
+body.locked .app{display:none}
+#login{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:var(--paper);padding:16px;z-index:1000}
+body.locked #login{display:flex}
+#login .box{width:100%;max-width:380px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-m);padding:28px}
+#login .mark{width:40px;height:40px;border-radius:10px;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;margin-bottom:14px}
+#login h2{font-size:20px;margin-bottom:4px}
+#login .field{margin-top:14px}
+#login .err{display:none;margin-top:12px;color:var(--danger);font-size:13px}
+#login .btn{width:100%;justify-content:center;margin-top:18px}
 </style>
 </head>
-<body>
+<body class="locked">
+
+<div id="login" role="dialog" aria-label="Вход">
+  <form class="box" onsubmit="event.preventDefault();doLogin()">
+    <div class="mark">А</div>
+    <h2>База кандидатов</h2>
+    <p class="hint">ООО «Авесто Групп» · HR-департамент</p>
+    <div class="field"><label for="lgLogin">Логин</label><input class="inp" id="lgLogin" autocomplete="username" autocapitalize="off" spellcheck="false"></div>
+    <div class="field"><label for="lgPass">Пароль</label><input class="inp" id="lgPass" type="password" autocomplete="current-password"></div>
+    <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;margin-top:12px;color:var(--ink-soft)">
+      <input type="checkbox" id="lgRemember"> Запомнить на этом компьютере (30 дней)</label>
+    <div class="err" id="lgErr"></div>
+    <button class="btn btn-primary" id="lgBtn" type="submit">Войти</button>
+  </form>
+</div>
 
 <div class="app">
 <aside class="sidebar">
@@ -3419,12 +3443,83 @@ function renderAdmin(){
       + '</tbody>'
     : '<tbody><tr><td class="mut" style="padding:14px">—</td></tr></tbody>';
 }
+/* ===== Вход по логину и паролю =====
+   В коде только хеши PBKDF2-SHA256 (соль + логин), паролей в открытом виде здесь нет.
+   Добавить пользователя или сменить пароль — пересчитать хеш и обновить список. */
+const AUTH_ITER = 150000;
+const AUTH_USERS = [{"login": "HR-Analytics", "role": "hr", "salt": "a1437bc9c364685846ed23f6271f1412", "hash": "d31d28a5ede824777eb10eb283005d5d2b586292858bcdfcfec839b016071115"}, {"login": "iso@avesto.tj", "role": "admin", "salt": "8aea7c17681ab8c43ef8bc66353afb3d", "hash": "b57fe35d22c2bbdb96ff715e220eb0a86ff06a119e3ce1a75746b7314ad83960"}, {"login": "kh.kaumov@avesto.tj", "role": "hr", "salt": "d5af23330450c0d794dfbbd44c593a92", "hash": "d79c2e82c984c00a9255573dcf50a986ed81b15a82d97a56f7cd42df154a6a24"}, {"login": "hr@avesto.tj", "role": "hr", "salt": "48aaeb04e4411ce2321c382af5ec1343", "hash": "f2a91780c2ea93ebb878464a1153002a0b22ed5e04f2a45699298ce7b7b18e84"}, {"login": "t.kudratova@avesto.tj", "role": "hr", "salt": "a8a0fea8364f19a84a594aaa96f146f7", "hash": "730fbdc51ab7cf86c42401226b90de499f43ad05da2871366a7fdb2b3d9e4639"}];
+const AUTH_KEY = 'avb_session';
+async function authHash(login, pass, salt){
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', enc.encode(pass), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({name:'PBKDF2', hash:'SHA-256', salt:enc.encode(salt+':'+login.toLowerCase()), iterations:AUTH_ITER}, key, 256);
+  return [...new Uint8Array(bits)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function authSession(){
+  for(const st of [sessionStorage, localStorage]){
+    try{
+      const s = JSON.parse(st.getItem(AUTH_KEY)||'null');
+      if(s && s.exp > Date.now() && AUTH_USERS.some(u=>u.login.toLowerCase()===s.login)) return s;
+      if(s) st.removeItem(AUTH_KEY);
+    }catch(e){}
+  }
+  return null;
+}
+let AUTH_FAILS = 0, AUTH_WAIT = 0;
+async function doLogin(){
+  const err = document.getElementById('lgErr'), btn = document.getElementById('lgBtn');
+  const show = m => { err.textContent = m; err.style.display = 'block'; };
+  if(Date.now() < AUTH_WAIT) return show('Слишком много попыток. Подождите '+Math.ceil((AUTH_WAIT-Date.now())/1000)+' с.');
+  const login = lgLogin.value.trim().toLowerCase(), pass = lgPass.value;
+  if(!login || !pass) return show('Введите логин и пароль.');
+  if(!(window.crypto && crypto.subtle)) return show('Браузер не поддерживает проверку пароля. Откройте платформу по адресу https://');
+  btn.disabled = true; btn.textContent = 'Проверяем…';
+  try{
+    const u = AUTH_USERS.find(x=>x.login.toLowerCase()===login);
+    // хеш считаем и для несуществующего логина — чтобы по времени ответа нельзя было угадать логин
+    const h = await authHash(login, pass, u ? u.salt : '00000000000000000000000000000000');
+    if(!u || h !== u.hash){
+      AUTH_FAILS++; if(AUTH_FAILS >= 5){ AUTH_WAIT = Date.now() + 30000; AUTH_FAILS = 0; }
+      lgPass.value = ''; return show('Неверный логин или пароль.');
+    }
+    AUTH_FAILS = 0;
+    const remember = lgRemember.checked;
+    const sess = {login, exp: Date.now() + (remember ? 30*864e5 : 12*36e5)};
+    (remember ? localStorage : sessionStorage).setItem(AUTH_KEY, JSON.stringify(sess));
+    lgPass.value = '';
+    unlock(sess);
+  } finally { btn.disabled = false; btn.textContent = 'Войти'; }
+}
+function unlock(sess){
+  const u = AUTH_USERS.find(x=>x.login.toLowerCase()===sess.login);
+  ME = {name: u.login, role: u.role, login: u.login}; LSS('avb_me', ME);
+  document.body.classList.remove('locked');
+  renderMe();
+  if(AUTH_RESUME){ const r = AUTH_RESUME; AUTH_RESUME = null; r(); }
+}
+function doLogout(){
+  try{ sessionStorage.removeItem(AUTH_KEY); localStorage.removeItem(AUTH_KEY); }catch(e){}
+  ME = null; LSS('avb_me', null);
+  document.body.classList.add('locked');
+  lgErr.style.display = 'none'; lgLogin.value = ''; lgPass.value = '';
+  setTimeout(()=>lgLogin.focus(), 50);
+}
+let AUTH_RESUME = null;
+/* ждём входа, прежде чем открывать базу */
+function requireLogin(){
+  const s = authSession();
+  if(s){ unlock(s); return Promise.resolve(); }
+  document.body.classList.add('locked');
+  setTimeout(()=>lgLogin.focus(), 50);
+  return new Promise(res=>{ AUTH_RESUME = res; });
+}
 let ME = LS('avb_me', null);
 function renderMe(){
   if(ME){
     const ini = ME.name.split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase();
     meBox.innerHTML = `<div class="avatar">${esc(ini)}</div>
-      <div class="who">${esc(ME.name)}<span class="role">${esc(T(ROLES[ME.role][0]))}</span></div>`;
+      <div class="who">${esc(ME.name)}<span class="role">${esc(T(ROLES[ME.role][0]))}</span></div>
+      <button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="doLogout()" title="Выйти">Выйти</button>`;
   } else {
     meBox.innerHTML = `<button class="btn btn-ghost btn-sm" onclick="go('admin')">${esc(T('meRole'))}</button>`;
   }
@@ -3528,6 +3623,7 @@ impIn.addEventListener('change', async e=>{
 
 /* старт */
 (async function(){
+  await requireLogin();
   await openDb(); DATA = await dbAll();
   { const upd = [];
     for(const c of DATA){
