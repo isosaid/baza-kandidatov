@@ -1206,6 +1206,29 @@ function pickSkills(raw){
 /* Папка вакансии по пути файла. Подпапки кандидатов («Имя Фамилия24.09.2026 14_47_10»)
    пропускаем и берём ближайшую папку без даты: «Маркетолог/Sabrina…/CV.pdf» → «Маркетолог». */
 const PERSON_DIR = /\d{2}[._]\d{2}[._]\d{4}/;
+/* Вакансия — папка первого уровня под выбранной: Резюме/<Вакансия>/<Кандидат>/файл.
+   Подпапка кандидата бывает и без даты («Амин Пирмамадов»), поэтому по дате вакансию не ищем.
+   parts — папки от выбранной вниз до файла (без самой выбранной, если это «Резюме»). */
+const ROOT_DIR = /^(резюме|resume|rezume|cv)(\b|$|[ _\-])/i;
+function vacancyFromPath(parts, rootName){
+  const a = (parts||[]).map(x=>String(x||'').trim()).filter(Boolean);
+  while(a.length>=2 && ROOT_DIR.test(a[0])) a.shift();
+  if(!a.length) return null;
+  if(a.length===1 && ROOT_DIR.test(a[0])) return null;          // файл прямо в «Резюме»
+  if(PERSON_DIR.test(a[0])){                                     // выбрана сама папка вакансии
+    const r = String(rootName||'').trim();
+    return r && !ROOT_DIR.test(r) && !PERSON_DIR.test(r) ? r : null;
+  }
+  return a[0];
+}
+function personDirFromPath(parts){
+  const a = (parts||[]).map(x=>String(x||'').trim()).filter(Boolean);
+  while(a.length>=2 && ROOT_DIR.test(a[0])) a.shift();
+  if(a.length>=2) return a[a.length-1];                          // Вакансия/Кандидат/файл
+  if(a.length===1 && PERSON_DIR.test(a[0])) return a[0];         // выбрана папка вакансии: Кандидат/файл
+  return null;
+}
+function cleanName(n){ return String(n||'').replace(/[()\[\]{}«»"“”]/g,' ').replace(/\s+/g,' ').trim() || null; }
 function vacancyFolder(parts){
   for(let i=(parts||[]).length-1;i>=0;i--){
     const p = String(parts[i]||'').trim();
@@ -1215,9 +1238,15 @@ function vacancyFolder(parts){
 }
 /* «Сабрина Муруввати24.09.2026 14_47_10» → имя и дата отклика */
 function personFromDir(dir){
+  const raw = String(dir||'').trim();
+  if(raw && !PERSON_DIR.test(raw)){
+    // подпапка без даты: «Амин Пирмамадов» — 2–5 слов из букв
+    const n = cleanName(raw.replace(/_/g,' '));
+    return n && /^[A-Za-zА-Яа-яЁёЎўҚқҒғҲҳҶҷӢӣӮӯ'’\-\. ]+$/.test(n) && n.split(' ').length>=2 && n.split(' ').length<=5 ? {name:n, applied:null} : null;
+  }
   const m = String(dir||'').match(/^(.*?)\s*(\d{2})[._](\d{2})[._](\d{4})(?:\s+(\d{2})[_:.](\d{2})(?:[_:.](\d{2}))?)?/);
   if(!m) return null;
-  const name = m[1].replace(/[_\-–—.,]+$/,'').trim();
+  const name = cleanName(m[1].replace(/[_\-–—.,]+$/,''));
   const t = new Date(+m[4], +m[3]-1, +m[2], +(m[5]||0), +(m[6]||0), +(m[7]||0)).getTime();
   return {name: name || null, applied: isNaN(t) ? null : t};
 }
@@ -1227,7 +1256,7 @@ function parseFileTemplate(fn){
   const base = String(fn||'').replace(/(\.(pdf|docx?|rtf|txt|odt))+$/i,'').trim();
   const m = base.match(/^(?:cv|резюме|rezume|resume)\s*[_\-]\s*(.+?)\s*_\s*(\d{1,2})[.\-\/](\d{1,2})[.\-\/](\d{2,4})\s*(?:_\s*(.*))?$/i);
   if(!m) return null;
-  const name = m[1].replace(/_+/g,' ').replace(/\s+/g,' ').trim();
+  const name = cleanName(m[1].replace(/_+/g,' ')) || '';
   const y = m[4].length===2 ? 2000 + +m[4] : +m[4];
   const t = new Date(y, +m[3]-1, +m[2]).getTime();
   const org = (m[5]||'').replace(/_+/g,' ').replace(/\s+/g,' ').trim();
@@ -1253,8 +1282,10 @@ function nameFromFile(fn){
     'обновленное','обновлённое','обновленный','обновлённый','новое','новый','последнее','последний','итог','итоговое','финал','final',
     'updated','update','version','версия','ru','en','rus','eng','tj','на','русском','английском','таджикском']);
   const n = String(fn||'').replace(/(\.(pdf|docx?|rtf|txt|odt))+$/i,'').replace(/\.[a-z0-9]{2,4}$/i,'').replace(/\(\d+\)/g,' ')
-    .split(/[\s_\-–—.,]+/).filter(w=>w && !STOP.has(w.toLowerCase()) && !/\d/.test(w)).join(' ').trim();
-  return n.length>=3 ? n : null;
+    .replace(/[()\[\]{}«»"“”]/g,' ').split(/[\s_\-–—.,]+/).filter(w=>w && !STOP.has(w.toLowerCase()) && !/\d/.test(w)).join(' ').trim();
+  // одно слово с маленькой буквы («yusupova») — не ФИО
+  if(n.length<3 || (!/\s/.test(n) && !/^[A-ZА-ЯЁЎҚҒҲҶӢӮ]/.test(n))) return null;
+  return n;
 }
 function pickPosition(raw, folder){
   const m = raw.match(/(?:желаемая\s*должность|должность|позиция|цель|вазифа|мансаб|position)\s*[:\-–]\s*(.{3,60})/i);
@@ -1513,12 +1544,45 @@ function scoreCandidate(c, crit){
 let DB=null, DATA=[];
 function openDb(){
   return new Promise((res,rej)=>{
-    const r = indexedDB.open('avesto_candidates',1);
+    const r = indexedDB.open('avesto_candidates',2);
     r.onupgradeneeded = e => { const db=e.target.result;
-      if(!db.objectStoreNames.contains('c')) db.createObjectStore('c',{keyPath:'id'}); };
+      if(!db.objectStoreNames.contains('c')) db.createObjectStore('c',{keyPath:'id'});
+      // файлы резюме — отдельно: база кандидатов грузится в память целиком, файлы — только по запросу
+      if(!db.objectStoreNames.contains('f')) db.createObjectStore('f'); };
     r.onsuccess = e => { DB=e.target.result; res(DB); };
     r.onerror = e => rej(e);
   });
+}
+function fileGet(id){
+  return new Promise(res=>{ try{ const r = DB.transaction('f','readonly').objectStore('f').get(id);
+    r.onsuccess = e => res(e.target.result || null); r.onerror = () => res(null); }catch(e){ res(null); } });
+}
+function filePut(id, blob){
+  return new Promise((res,rej)=>{ const tx = DB.transaction('f','readwrite'); tx.objectStore('f').put(blob, id);
+    tx.oncomplete = () => res(); tx.onerror = e => rej(e); });
+}
+/* Файл резюме: из хранилища файлов → из старой записи (data:) → из Google Drive. null — файла нет. */
+async function getResumeBlob(rec){
+  if(!rec) return null;
+  const b = await fileGet(rec.id); if(b) return b;
+  if(rec.fileData){ try{ return await (await fetch(rec.fileData)).blob(); }catch(e){} }
+  if(rec.gdFileId && (GD_TOKEN || GD_API_KEY)){
+    try{
+      const url = `https://www.googleapis.com/drive/v3/files/${rec.gdFileId}?alt=media` + (GD_TOKEN ? '' : '&key='+encodeURIComponent(GD_API_KEY));
+      const r = await fetch(url, {headers: GD_TOKEN ? {'Authorization':'Bearer '+GD_TOKEN} : {}});
+      if(r.ok){ const blob = await r.blob(); try{ await filePut(rec.id, blob); }catch(e){} return blob; }
+    }catch(e){}
+  }
+  return null;
+}
+/* Старые записи хранили файл внутри себя (data:) — переносим в хранилище файлов, база становится лёгкой */
+async function moveInlineFiles(){
+  const heavy = DATA.filter(c=>c.fileData);
+  for(const c of heavy){
+    try{ const blob = await (await fetch(c.fileData)).blob(); await filePut(c.id, blob); c.hasFile = true; delete c.fileData; }catch(e){}
+  }
+  if(heavy.length) await dbPut(heavy.filter(c=>!c.fileData));
+  return heavy.length;
 }
 function dbPut(items){
   return new Promise((res,rej)=>{
@@ -1556,10 +1620,10 @@ async function downloadResume(id, filename){
   try{
     const rec = await dbGetOne(id);
     if(!rec){ toast('Файл не найден в базе. Попробуйте загрузить резюме заново.'); return; }
-    // Если есть локальный файл — скачиваем напрямую
-    if(rec.fileData){
-      // через Blob: у data:-ссылки Chrome иногда игнорирует имя файла
-      const blob = await (await fetch(rec.fileData)).blob();
+    // Если файл есть на этом компьютере (или его можно взять из Google Drive) — скачиваем
+    const local = await fileGet(rec.id) || (rec.fileData ? await (await fetch(rec.fileData)).blob() : null);
+    if(local){
+      const blob = local;
       const objUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = objUrl;
@@ -1692,12 +1756,13 @@ async function expandZips(files){
 async function mergeResumeFile(rec, f, folder){
   const buf = await f.arrayBuffer();
   const txt = await readFileText(new File([buf], f.name, {lastModified: f.lastModified||Date.now()}));
-  const b64 = (rec.source==='bitrix' && rec.url) ? null : await blobToDataUrl(new Blob([buf], {type: f.type||mimeByName(f.name)}));
-  const keepCopy = !(rec.source==='bitrix' && rec.url);   // у резюме из Битрикс24 файл открывается по ссылке
+  await filePut(rec.id, new Blob([buf], {type: f.type||mimeByName(f.name)}));   // для просмотра в карточке
   const full = parseResume(txt,{id:rec.id,file:f.name,folder:folder||rec.folder,size:f.size,source:rec.source||'local',url:rec.url,
-    mtime:rec.applied,fileData:keepCopy?b64:null,fileMime:f.type||mimeByName(f.name)});
-  Object.assign(rec, full, {name: full.name||rec.name, status: rec.status, verdict: rec.verdict,
-    added: rec.added, applied: rec.applied||full.applied, bxPersonDir: rec.bxPersonDir||null, meta:false, gdFileId:null});
+    mtime:rec.applied,fileMime:f.type||mimeByName(f.name)});
+  // ФИО из подпапки кандидата на Диске точнее, чем из названия файла
+  const keepName = rec.bxPersonDir && rec.name;
+  Object.assign(rec, full, {name: keepName ? rec.name : (full.name||rec.name), status: rec.status, verdict: rec.verdict,
+    added: rec.added, applied: rec.applied||full.applied, bxPersonDir: rec.bxPersonDir||null, meta:false, gdFileId:null, hasFile:true});
   return rec;
 }
 async function ingestFiles(input){
@@ -1713,7 +1778,7 @@ async function ingestFiles(input){
     const relPath = f.webkitRelativePath || '';
     const dirs = relPath ? relPath.split('/').slice(0,-1) : [];
     const parent = dirs.length ? dirs[dirs.length-1] : null; // для id — как раньше, чтобы не было дублей
-    const folder = vacancyFolder(dirs);
+    const folder = vacancyFromPath(dirs);
     const id = 'f:'+parent+'/'+f.name+':'+f.size;
     // этот файл уже есть в базе как запись «по папке» из Битрикс24 — дополняем её
     const metas = DATA.filter(c=>c.meta && c.file===f.name && (!c.size || +c.size===f.size));
@@ -1738,8 +1803,9 @@ async function ingestFiles(input){
     try{
       const buf = await f.arrayBuffer();
       const txt = await readFileText(new File([buf], f.name, {lastModified: f.lastModified||Date.now()}));
-      const b64 = await new Promise(r=>{ const rd=new FileReader(); rd.onload=e=>r(e.target.result); rd.readAsDataURL(new Blob([buf])); });
-      const c = parseResume(txt,{id,file:f.name,folder,size:f.size,source:'local',mtime:f.lastModified||null,fileData:b64,fileMime:f.type||'application/octet-stream'});
+      await filePut(id, new Blob([buf], {type: f.type||mimeByName(f.name)}));
+      const c = parseResume(txt,{id,file:f.name,folder,size:f.size,source:'local',mtime:f.lastModified||null,fileMime:f.type||mimeByName(f.name)});
+      c.hasFile = true;
       fresh.push(c); existing.add(id); if(c.scan) scanCnt++;
       if(fresh.length>=100){ await dbPut(fresh); savedFresh += fresh.length; fresh.length = 0; }
       log((c.scan?'⚠ ':'✓ ')+esc(f.name)+(c.scan?' — '+T('noLayer'):' — '+(c.name||T('noName'))+(c.skills.length?' · '+T('skCnt')+': '+c.skills.length:'')), c.scan?'w':'ok');
@@ -2086,6 +2152,73 @@ async function fillFromFile(f){
     toast('✓ Карточка заполнена из резюме' + (c.scan ? ' — но в файле нет текстового слоя (скан)' : ''));
   }catch(e){ if(box) box.textContent = 'Не удалось прочитать файл: '+(e.message||e); }
 }
+/* ===== Просмотр резюме в карточке и «Скачать PDF» =====
+   PDF показываем встроенным просмотрщиком браузера, DOCX — переводим в HTML (mammoth),
+   DOC/RTF/TXT — текстом. Документ открывается в изолированной рамке без скриптов. */
+let PV = {id:null, kind:null, url:null, html:null, blob:null};
+function pvReset(){ if(PV.url) URL.revokeObjectURL(PV.url); PV = {id:null, kind:null, url:null, html:null, blob:null}; }
+function pvDoc(c, body){
+  const title = esc(cvName(c, false));
+  return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>${title}</title><style>
+    body{font-family:"Segoe UI",Arial,sans-serif;color:#1d2433;max-width:820px;margin:24px auto;padding:0 28px;font-size:14px;line-height:1.55;background:#fff}
+    img{max-width:100%;height:auto} table{border-collapse:collapse;max-width:100%} td,th{border:1px solid #cfd4da;padding:4px 7px;vertical-align:top}
+    h1,h2,h3{line-height:1.25} pre{white-space:pre-wrap;font-family:inherit;margin:0} p{margin:0 0 6px}
+    @page{margin:15mm} @media print{body{margin:0 auto}}
+  </style></head><body>${body}</body></html>`;
+}
+async function loadPreview(c){
+  pvReset(); PV.id = c.id;
+  const body = document.getElementById('pvBody'), acts = document.getElementById('pvActs');
+  if(!body) return;
+  const blob = await getResumeBlob(c);
+  if(PV.id !== c.id || !document.getElementById('pvBody')) return;      // карточку уже сменили
+  if(!blob){
+    body.innerHTML = `<div style="border:1.5px dashed var(--line);border-radius:10px;padding:22px;text-align:center;font-size:13px;cursor:pointer"
+        onclick="pvIn.click()" ondragover="event.preventDefault()" ondrop="event.preventDefault();fillFromFile(event.dataTransfer.files[0])">
+        Файла резюме на этом компьютере нет${c.url?` — <a href="${esc(c.url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">скачайте его в Битрикс24</a>`:''}
+        и перетащите сюда, чтобы смотреть его в карточке.<br><span class="hint">PDF, DOCX, DOC, RTF, TXT</span></div>
+      <input type="file" id="pvIn" hidden accept=".pdf,.docx,.doc,.txt,.rtf" onchange="fillFromFile(this.files[0])">`;
+    return;
+  }
+  PV.blob = blob;
+  const name = (c.file||'').toLowerCase(), type = blob.type||'';
+  try{
+    if(/\.pdf$/.test(name) || /pdf/.test(type)){
+      PV.kind = 'pdf';
+      PV.url = URL.createObjectURL(blob.type==='application/pdf' ? blob : new Blob([blob], {type:'application/pdf'}));
+      body.innerHTML = `<iframe src="${PV.url}" title="Резюме" style="width:100%;height:78vh;border:1px solid var(--line);border-radius:8px;background:#fff"></iframe>`;
+    } else {
+      let inner;
+      if(/\.docx$/.test(name) && window.mammoth){
+        const r = await mammoth.convertToHtml({arrayBuffer: await blob.arrayBuffer()});
+        inner = r.value || '<p>(в документе нет текста)</p>';
+      } else {
+        const txt = c.raw || await readFileText(new File([blob], c.file||'resume.txt'));
+        inner = `<pre>${esc(txt||'(текста нет)')}</pre>`;
+      }
+      PV.kind = 'html'; PV.html = pvDoc(c, inner);
+      body.innerHTML = `<iframe id="pvFrame" title="Резюме" sandbox="allow-same-origin allow-modals" style="width:100%;height:78vh;border:1px solid var(--line);border-radius:8px;background:#fff"></iframe>`;
+      document.getElementById('pvFrame').srcdoc = PV.html;
+    }
+    acts.style.display = '';
+  }catch(e){
+    body.innerHTML = `<p class="hint">Не удалось показать файл: ${esc(e.message||String(e))}. Его можно скачать кнопкой «Скачать резюме».</p>`;
+  }
+}
+function pvOpenFull(){
+  if(PV.kind==='pdf' && PV.url) return window.open(PV.url, '_blank');
+  if(PV.kind==='html'){ const u = URL.createObjectURL(new Blob([PV.html], {type:'text/html'})); window.open(u, '_blank'); setTimeout(()=>URL.revokeObjectURL(u), 60000); }
+}
+async function pvSavePdf(){
+  const c = DATA.find(x=>x.id===PV.id); if(!c) return;
+  if(PV.kind==='pdf'){                                   // уже PDF — скачиваем как есть, с названием по шаблону
+    const a = document.createElement('a'); a.href = PV.url; a.download = cvName(c, false)+'.pdf';
+    document.body.appendChild(a); a.click(); a.remove(); return;
+  }
+  // Word и прочее — печать в PDF: в окне печати выберите «Сохранить как PDF»
+  const fr = document.getElementById('pvFrame');
+  if(fr && fr.contentWindow){ toast('В окне печати выберите «Сохранить как PDF»'); fr.contentWindow.focus(); fr.contentWindow.print(); }
+}
 function renderDetail(){
   const c = DATA.find(x=>x.id===OPEN_ID);
   if(!c){ detailOut.innerHTML = `<div class="panel"><div class="empty">
@@ -2111,12 +2244,22 @@ function renderDetail(){
     </div>
     <div class="row">
       ${c.url?`<a class="btn btn-line" href="${esc(c.url)}" target="_blank" rel="noopener">${esc(T('openFile'))}</a>`:''}
-      ${(c.source==='local'||c.url||c.fileData||c.gdFileId)?`<button class="btn btn-line" onclick="downloadResume(${jsArg(c.id)},${jsArg(cvName(c))})">⬇ Скачать резюме</button>`:''}
+      ${(c.source==='local'||c.url||c.hasFile||c.fileData||c.gdFileId)?`<button class="btn btn-line" onclick="downloadResume(${jsArg(c.id)},${jsArg(cvName(c))})">⬇ Скачать резюме</button>`:''}
     </div>
   </div>
 
   <div class="detail-grid">
     <div>
+      ${c.meta ? '' : `<div class="panel section-block" id="pvBox">
+        <div class="row" style="justify-content:space-between;margin-bottom:12px">
+          <h3 style="margin:0">Резюме</h3>
+          <div class="row" id="pvActs" style="display:none">
+            <button class="btn btn-line btn-sm" onclick="pvOpenFull()">Открыть во весь экран</button>
+            <button class="btn btn-primary btn-sm" onclick="pvSavePdf()">⬇ Скачать PDF</button>
+          </div>
+        </div>
+        <div id="pvBody"><p class="hint">Загружаем резюме…</p></div>
+      </div>`}
       <div class="panel section-block">
         <h3>${esc(T('mainInfo'))}</h3>
         <div class="grid g2">
@@ -2205,6 +2348,7 @@ function renderDetail(){
     </div>
   </div>`;
   detailOut.querySelectorAll('.dial').forEach(drawDial);
+  if(!c.meta) loadPreview(c);
   crumb();
 }
 async function saveCard(){
@@ -2590,6 +2734,7 @@ async function bxSync(){
   try{
     const files = [];
     let nFolders = 0;
+    let BX_ROOT_NAME = ''; try{ const sp = JSON.parse(localStorage.getItem('avb_folder_path')||'null'); if(sp && sp.id===root) BX_ROOT_NAME = sp.path.split(' / ').pop(); }catch(e){}
     const live = document.createElement('div'); live.className='w';
     async function walk(id, path){
       nFolders++;
@@ -2599,7 +2744,7 @@ async function bxSync(){
         if(it.TYPE==='folder'){ if(bxDeep.checked) await walk(it.ID, [...path, it.NAME]); }
         else if(/\.(pdf|docx|doc|txt|rtf)$/i.test(it.NAME)){
           const last = path[path.length-1] || '';
-          files.push({...it, folder:vacancyFolder(path), personDir: PERSON_DIR.test(last) ? last : null});
+          files.push({...it, folder:vacancyFromPath(path, BX_ROOT_NAME), personDir: personDirFromPath(path)});
         }
       }
     }
@@ -2621,21 +2766,29 @@ async function bxSync(){
         const old = byId.get(id);
         let ch = false;
         if(old && f.folder && old.folder!==f.folder){ old.folder = f.folder; ch = true; }
+        if(old && f.personDir && old.bxPersonDir!==f.personDir){
+          old.bxPersonDir = f.personDir;
+          const pd = personFromDir(f.personDir);
+          if(pd && pd.name && (old.meta || !old.name || /[()]/.test(old.name))){ old.name = pd.name; old.gender = pickGender(pd.name); }
+          if(pd && pd.applied && !old.applied) old.applied = pd.applied;
+          ch = true;
+        }
         if(old && old.meta && !stopped){
           // раньше записан только по папке — пробуем разобрать резюме полностью
           try{
             const blob = await bxFetchFile(f); okDownloads++;
             const txt = await readFileText(new File([blob], f.NAME));
             const full = parseResume(txt,{id,file:f.NAME,folder:f.folder,size:blob.size,source:'bitrix',url:f.DETAIL_URL,
-              mtime:old.applied, fileData: await blobToDataUrl(blob), fileMime: blob.type || mimeByName(f.NAME)});
+              mtime:old.applied, fileMime: blob.type || mimeByName(f.NAME)});
+            await filePut(id, blob); full.hasFile = true;
             Object.assign(old, full, {name: full.name||old.name, status: old.status, verdict: old.verdict, added: old.added, applied: old.applied||full.applied, meta:false});
             ch = true;
           }catch(e){ if(e.kind==='net'){ netFails++; if(netFails>=3 && !okDownloads) stopped = e; } }
         }
-        else if(old && !old.meta && !old.fileData && !old.gdFileId && !stopped){
+        else if(old && !old.meta && !old.hasFile && !old.fileData && !old.gdFileId && !stopped){
           // раньше из Битрикс сохранялся только текст — докачиваем сам файл для Google Drive
           try{ const rb = await bxFetchFile(f); okDownloads++;
-               old.fileData = await blobToDataUrl(rb); old.fileMime = rb.type || mimeByName(f.NAME); ch = true; }
+               await filePut(id, rb); old.hasFile = true; old.fileMime = rb.type || mimeByName(f.NAME); ch = true; }
           catch(e){ if(e.kind==='net'){ netFails++; if(netFails>=3 && !okDownloads) stopped = e; } }
         }
         if(ch) await dbPut([old]);
@@ -2648,7 +2801,8 @@ async function bxSync(){
         const txt = await readFileText(new File([blob], f.NAME));
         const c = parseResume(txt,{id,file:f.NAME,folder:f.folder,size:blob.size,source:'bitrix',url:f.DETAIL_URL,
           mtime:(f.UPDATE_TIME||f.CREATE_TIME)?Date.parse(f.UPDATE_TIME||f.CREATE_TIME)||null:null,
-          fileData: await blobToDataUrl(blob), fileMime: blob.type || mimeByName(f.NAME)});
+          fileMime: blob.type || mimeByName(f.NAME)});
+        await filePut(id, blob); c.hasFile = true;
         fresh.push(c); existing.add(id);
         bxLog((c.scan?'⚠ ':'✓ ')+esc(f.NAME)+(c.scan?' — '+esc(T('noLayer')):''), c.scan?'w':'ok');
       }catch(e){
@@ -2792,14 +2946,11 @@ async function gdUploadResume(id){
   if(!GD_TOKEN) return null;
   try{
     const rec = await dbGetOne(id);
-    if(!rec || !rec.fileData) return null;
-    // Конвертируем base64 в Blob
-    const [header, b64] = rec.fileData.split(',');
-    const mime = (header.match(/:(.*?);/)||[])[1] || rec.fileMime || 'application/octet-stream';
-    const bin = atob(b64);
-    const arr = new Uint8Array(bin.length);
-    for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
-    const blob = new Blob([arr],{type:mime});
+    if(!rec) return null;
+    const raw = await fileGet(rec.id) || (rec.fileData ? await (await fetch(rec.fileData)).blob() : null);
+    if(!raw) return null;
+    const mime = raw.type || rec.fileMime || mimeByName(rec.file);
+    const blob = raw.type ? raw : new Blob([raw], {type:mime});
     const folderId = await gdGetSubfolder(posOf(rec) || rec.category || 'Без вакансии');
     const fname = cvName(rec) || (id+'.pdf');
     // Проверяем, не загружен ли уже (по gdFileId в записи)
@@ -2917,7 +3068,7 @@ async function gdSaveDb(quiet){
   try{
     // Загружаем файлы резюме в Drive для кандидатов у которых ещё нет gdFileId
     const allRecs = await dbAll();
-    const withFiles = allRecs.filter(c=>c.fileData && !c.gdFileId);
+    const withFiles = allRecs.filter(c=>(c.hasFile||c.fileData) && !c.gdFileId);
     if(withFiles.length>0){
       gdSetStatus(`⏳ Загружаем ${withFiles.length} резюме в Google Drive…`,'');
       let uploaded=0;
@@ -3625,12 +3776,14 @@ impIn.addEventListener('change', async e=>{
 (async function(){
   await requireLogin();
   await openDb(); DATA = await dbAll();
+  await moveInlineFiles();
   { const upd = [];
     for(const c of DATA){
       const tpl = parseFileTemplate(c.file); let ch = false;
       if(!c.name){ const n = nameFromFile(c.file); if(n){ c.name = n; c.gender = c.gender || pickGender(n); ch = true; } }
       if(tpl && tpl.org && !c.org){ c.org = tpl.org; ch = true; }
       if(tpl && tpl.applied && !c.applied){ c.applied = tpl.applied; ch = true; }
+      if(c.name && /[()\[\]{}«»"]/.test(c.name)){ c.name = cleanName(c.name); ch = true; }
       if(ch) upd.push(c);
     }
     if(upd.length) await dbPut(upd); }
