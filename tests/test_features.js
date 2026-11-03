@@ -103,11 +103,11 @@ const RELOC = [
 
   // ---- фильтр по категории на вкладке «Все резюме» ----
   await p.click('[data-v=base]'); await p.waitForTimeout(300);
-  const chips = await p.locator('#catChips .chip').allTextContents();
-  check('чипы категорий построены', chips.length >= 2, chips.join(' | '));
-  await p.locator('#catChips .chip').nth(1).click(); await p.waitForTimeout(300);
+  const chips = await p.locator('#catChips .cat').allTextContents();
+  check('кнопки категорий построены', chips.length >= 2, chips.join(' | '));
+  await p.locator('#catChips .cat').nth(1).click(); await p.waitForTimeout(300);
   const rowsFiltered = await p.locator('#tblBase tbody tr').count();
-  await p.locator('#catChips .chip').first().click(); await p.waitForTimeout(300);
+  await p.locator('#catChips .cat').first().click(); await p.waitForTimeout(300);
   const rowsAll = await p.locator('#tblBase tbody tr').count();
   check('фильтр по категории сужает список', rowsFiltered < rowsAll && rowsFiltered > 0, `${rowsFiltered} из ${rowsAll}`);
 

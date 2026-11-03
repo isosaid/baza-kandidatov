@@ -122,6 +122,30 @@ textarea.inp{resize:vertical;min-height:96px;font-size:14.5px;padding:13px 15px;
 @media(max-width:860px){.g2,.g3,.g4{grid-template-columns:1fr}}
 
 .chip-row{display:flex;flex-wrap:wrap;gap:8px}
+/* категории — крупные кнопки с иконкой */
+.cat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,215px),1fr));gap:10px}
+.cat{display:flex;align-items:center;gap:12px;width:100%;padding:13px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface);
+  color:var(--ink);font:inherit;text-align:left;cursor:pointer;transition:border-color .15s,box-shadow .15s,background .15s,transform .15s}
+.cat:hover{border-color:var(--accent);box-shadow:0 3px 10px rgba(20,31,53,.07);transform:translateY(-1px)}
+.cat:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.cat .ic{flex:0 0 40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:var(--accent-soft);color:var(--accent);transition:background .15s,color .15s}
+.cat .ic svg{width:21px;height:21px}
+.cat .tx{min-width:0;display:flex;flex-direction:column;gap:2px}
+.cat .t{font-size:13.5px;font-weight:600;line-height:1.3;overflow-wrap:break-word;hyphens:auto}
+.cat .n{font-size:12px;color:var(--muted)}
+.cat.selected{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 4px 14px rgba(30,111,82,.25)}
+.cat.selected .ic{background:rgba(255,255,255,.18);color:#fff}
+.cat.selected .n{color:rgba(255,255,255,.82)}
+.cat.all .ic{background:#E8ECF3;color:var(--ink-soft)}
+.cat.none .ic{background:#F2F0EA;color:var(--muted)}
+@media (max-width:600px){
+  .cat-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .cat{padding:11px;gap:8px;flex-direction:column;align-items:flex-start;min-width:0}
+  .cat .ic{flex:0 0 auto;width:32px;height:32px;border-radius:8px}
+  .cat .ic svg{width:18px;height:18px}
+  .cat .t{font-size:12.5px}
+  .cat .n{font-size:11.5px}
+}
 .filters-toggle{display:flex;align-items:center;gap:6px;margin-top:18px;font-size:13px;font-weight:600;color:var(--ink-soft);background:none;border:none;padding:0}
 .filters-toggle svg{transition:transform .15s ease}
 .filters-toggle[aria-expanded="true"] svg{transform:rotate(180deg)}
@@ -398,11 +422,9 @@ body.locked #login{display:flex}
   </div>
 
   <div class="panel" style="padding:18px 22px;margin-bottom:18px">
-    <div class="eyebrow" data-i="cCat">Категория должности</div>
-    <div class="chip-row" id="catChips"></div>
-    <div class="hint" style="margin-top:8px" data-i="catAuto">определяется автоматически по должности и навыкам, правится в карточке</div>
-    <div class="eyebrow" style="margin-top:16px" data-i="catLbl">Позиция (определяется по названию папки, правится в карточке)</div>
-    <div class="chip-row" id="posChips"></div>
+    <div class="eyebrow" data-i="cCat" style="margin-bottom:10px">Категория должности</div>
+    <div class="cat-grid" id="catChips" role="group" aria-label="Категория должности"></div>
+    <div class="hint" style="margin-top:10px" data-i="catAuto">определяется автоматически по должности и навыкам, правится в карточке</div>
   </div>
 
   <div class="panel" style="margin-bottom:18px">
@@ -1853,14 +1875,15 @@ function fillSelects(){
   const stCur=fStatus.value;
   fStatus.innerHTML = '<option value="">'+esc(T('anyStatus'))+'</option>'+Object.keys(STATUS).map(k=>`<option value="${k}">${esc(STATUS[k][LANG])}</option>`).join('');
   fStatus.value=stCur;
-  const positions = uniq(DATA.map(posOf));
-  const noPos = DATA.filter(c=>!posOf(c)).length;
-  posChips.innerHTML = [`<span class="chip ${POS_FILTER?'':'selected'}" onclick="setPos('')">${esc(T('anyPos'))}</span>`]
-    .concat(positions.map(p=>`<span class="chip ${POS_FILTER===p?'selected':''}" onclick="setPos(${jsArg(p)})">${esc(p)} <b class="num" style="margin-left:5px;opacity:.6">${DATA.filter(x=>posOf(x)===p).length}</b></span>`))
-    .concat(noPos?[`<span class="chip ${POS_FILTER===NO_POS?'selected':''}" onclick="setPos(NO_POS)">без вакансии <b class="num" style="margin-left:5px;opacity:.6">${noPos}</b></span>`]:[]).join('');
-  const cats = CATEGORIES.map(c=>c[0]).filter(c=>DATA.some(x=>x.category===c));
-  catChips.innerHTML = [`<span class="chip ${CAT_FILTER?'':'selected'}" onclick="setCat('')">${esc(T('anyCat'))}</span>`]
-    .concat(cats.map(c=>`<span class="chip ${CAT_FILTER===c?'selected':''}" onclick="setCat(${jsArg(c)})">${esc(c)} <b class="num" style="margin-left:5px;opacity:.6">${DATA.filter(x=>x.category===c).length}</b></span>`)).join('');
+  POS_FILTER = '';   // фильтр по позиции убран (решение 03.11.2026): позиций сотни, категории их заменяют
+  const cnt = {}; DATA.forEach(x=>{ const k = x.category||NO_CAT; cnt[k] = (cnt[k]||0)+1; });
+  const cats = CATEGORIES.map(c=>c[0]).filter(c=>cnt[c]).sort((a,b)=>cnt[b]-cnt[a]);
+  const card = (key, label, n, cls) => `<button type="button" class="cat ${cls||''} ${CAT_FILTER===key?'selected':''}" aria-pressed="${CAT_FILTER===key}"
+      onclick="setCat(${jsArg(key)})"><span class="ic" aria-hidden="true">${catIcon(key)}</span>
+      <span class="tx"><span class="t">${esc(label)}</span><span class="n">${n} ${esc(candWord(n))}</span></span></button>`;
+  catChips.innerHTML = card('', T('anyCat').replace(/^./, ch=>ch.toUpperCase()), DATA.length, 'all')
+    + cats.map(c=>card(c, c, cnt[c])).join('')
+    + (cnt[NO_CAT] ? card(NO_CAT, LANG==='tj'?'Бе категория':'Без категории', cnt[NO_CAT], 'none') : '');
   if(window.cCat){ const cur=cCat.value;
     cCat.innerHTML = '<option value="">'+esc(T('anyCat'))+'</option>'+CATEGORIES.map(c=>`<option>${esc(c[0])}</option>`).join('');
     cCat.value=cur; }
@@ -1880,6 +1903,34 @@ function showBaseTable(){
   const el = document.getElementById('baseCnt') || tblBase;
   el.scrollIntoView({behavior:'smooth', block:'start'});
 }
+const NO_CAT = '\u0000nocat';
+function candWord(n){
+  if(LANG==='tj') return 'номзад';
+  const a = n%10, b = n%100;
+  return (a===1 && b!==11) ? 'кандидат' : (a>=2 && a<=4 && (b<12 || b>14)) ? 'кандидата' : 'кандидатов';
+}
+/* Иконки категорий: простые линейные, цвет берут от кнопки */
+const CAT_SVG = {
+  '':  '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+  'Бухгалтерия, финансы и аудит': '<rect x="5" y="2.5" width="14" height="19" rx="2"/><rect x="8" y="5.5" width="8" height="4" rx="1"/><path d="M8.5 13h.01M12 13h.01M15.5 13h.01M8.5 16.5h.01M12 16.5h.01M15.5 16.5h.01"/>',
+  'Закупки, логистика и склад': '<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5M12 13v8"/>',
+  'Маркетинг, дизайн, PR и продажи': '<path d="M3 11v2a1 1 0 0 0 1 1h3l5 4V6L7 10H4a1 1 0 0 0-1 1z"/><path d="M16 9a3.5 3.5 0 0 1 0 6M19 6.5a7 7 0 0 1 0 11"/>',
+  'Управление персоналом, HR': '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><circle cx="17" cy="9" r="2.5"/><path d="M16.5 14.2c2.8.3 5 2.4 5 5.3"/>',
+  'Производственные и технические': '<path d="M14.7 6.3a4 4 0 0 0-5.3 5.3L3.5 17.5a2 2 0 0 0 2.8 2.8l5.9-5.9a4 4 0 0 0 5.3-5.3l-2.4 2.4-2.6-.6-.6-2.6z"/>',
+  'IT и цифровые технологии': '<rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M8 21h8M12 17v4M9.5 8.5 7 10.5l2.5 2M14.5 8.5l2.5 2-2.5 2"/>',
+  'Проектная работа и международное сотрудничество': '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3z"/>',
+  'Административные и работа с гос.структурами': '<path d="M3 21h18M4 10h16M12 3 3.5 8h17z"/><path d="M6 10v8M10 10v8M14 10v8M18 10v8"/>',
+  'Юриспруденция': '<path d="M12 3v18M7 21h10M5 7h14M5 7l-3 7a3 3 0 0 0 6 0zM19 7l-3 7a3 3 0 0 0 6 0z"/>',
+  'Транспорт': '<path d="M2 6h11v10H2zM13 9h4.5l3.5 3.5V16h-8"/><circle cx="6" cy="17.5" r="2"/><circle cx="17" cy="17.5" r="2"/>',
+  'Топ-менеджмент, руководство': '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8.5 7V5a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v2M3 12.5h18"/>',
+  'Начало карьеры': '<path d="M2 9.5 12 5l10 4.5-10 4.5z"/><path d="M6 11.3V16c0 1.5 2.7 3 6 3s6-1.5 6-3v-4.7M22 9.5V15"/>',
+  'Безопасность': '<path d="M12 3 4.5 6v5.5c0 4.6 3.1 8.2 7.5 9.5 4.4-1.3 7.5-4.9 7.5-9.5V6z"/><path d="m9 12 2 2 4-4"/>',
+};
+CAT_SVG[NO_CAT] = '<circle cx="12" cy="12" r="9" stroke-dasharray="3 3"/><path d="M9.6 9.3a2.5 2.5 0 1 1 3.4 2.4c-.6.3-1 .8-1 1.5v.3M12 16.8h.01"/>';
+function catIcon(key){
+  const body = CAT_SVG[key] || '<circle cx="12" cy="12" r="8"/>';
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+}
 function setPos(p){ POS_FILTER = POS_FILTER===p ? '' : p; PAGE=50; renderBase(); if(POS_FILTER) showBaseTable(); }
 function setCat(c){ CAT_FILTER = CAT_FILTER===c ? '' : c; PAGE=50; renderBase(); if(CAT_FILTER) showBaseTable(); }
 
@@ -1892,7 +1943,7 @@ function currentFiltered(){
   const q=qs.value, ci=fCity.value, ed=fEdu.value, st=fStatus.value;
   return DATA.filter(c=>matchQuery(c,q)
     && (!POS_FILTER || (POS_FILTER===NO_POS ? !posOf(c) : posOf(c)===POS_FILTER))
-    && (!CAT_FILTER || c.category===CAT_FILTER)
+    && (!CAT_FILTER || (CAT_FILTER===NO_CAT ? !c.category : c.category===CAT_FILTER))
     && (!ci || c.city===ci) && (!ed || c.edu===+ed) && (!st || (c.status||'new')===st));
 }
 function renderBase(){
