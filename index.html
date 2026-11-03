@@ -2400,17 +2400,32 @@ function resetWeights(){ W={...W_DEFAULT}; localStorage.setItem('avb_weights',JS
 /* ============================================================
    БИТРИКС24
    ============================================================ */
-/* Настройки портала «из коробки»: подставляются на любом компьютере при первом открытии,
-   чтобы коллеге не нужно было ничего вводить руками. Если пользователь поменяет поля —
+/* Настройки портала «из коробки»: подставляются на любом компьютере при первом открытии.
+   Вебхук здесь не задаётся — внутри Битрикс24 (локальное приложение) он не нужен вовсе,
+   а на отдельном сайте его вставляют в «Администрировании», и он хранится только в браузере. Если пользователь поменяет поля —
    его значение сохраняется в браузере и имеет приоритет над этими. */
-const DEFAULT_HOOK     = 'https://crm.avesto.tj/rest/117/ckibnzynpxt2jgt0/';
+const DEFAULT_HOOK     = '';   // ключ вебхука в коде не храним: код сайта открыт на GitHub
 const DEFAULT_FOLDER   = '58451';
 const DEFAULT_SYNC_MIN = 60;   // автосинхронизация раз в час
 /* Метка сборки — видна в «Администрировании». Если там старая дата, браузер
    показывает файл из кэша: Cmd+Shift+R (Mac) или Ctrl+F5 (Windows). */
 const BUILD = '2026-11-03 · вебхук и папка вшиты';
 
-const inBitrix = () => !!(window.BX24 || (window.parent!==window && /bitrix/i.test(document.referrer)));
+/* Внутри Битрикс24 (локальное приложение) подключаем библиотеку BX24: запросы идут от имени
+   того, кто открыл платформу, с правами приложения — вебхук не нужен. */
+let BX_APP = false;
+function bxAppInit(){
+  if(window.parent === window) return Promise.resolve(false);          // открыта не во фрейме портала
+  return new Promise(res=>{
+    let fin = false;
+    const done = v => { if(fin) return; fin = true; clearTimeout(t); BX_APP = v; try{ renderBxMode(); renderAdmin(); }catch(e){} res(v); };
+    const t = setTimeout(()=>done(false), 7000);
+    loadScript(['https://api.bitrix24.com/api/v1/'])
+      .then(()=>{ if(!window.BX24) return done(false); BX24.init(()=>done(true)); })
+      .catch(()=>done(false));
+  });
+}
+const inBitrix = () => BX_APP;
 function renderBxMode(){
   bxMode.innerHTML = inBitrix() ? `<div class="note">${esc(T('modeApp'))}</div>` : `<div class="note w">${esc(T('modeHook'))}</div>`;
 }
@@ -2449,7 +2464,7 @@ function hookHint(){
   el.textContent = m; el.style.display = m ? 'block' : 'none';
 }
 async function bxCall(method, params){
-  if(window.BX24){
+  if(BX_APP && window.BX24){
     return new Promise((res,rej)=>{ BX24.callMethod(method, params, r=>{
       if(r.error()) rej(new Error(r.error().ex?r.error().ex.error_description:r.error())); else res(r.data()); }); });
   }
@@ -3823,7 +3838,9 @@ applyPortalDefaults();
 /* старт */
 (async function(){
  try{
+  const bxReady = bxAppInit();      // внутри Битрикс24 — параллельно с входом
   await requireLogin();
+  await bxReady;
   await openDb(); DATA = await dbAll();
   await moveInlineFiles();
   { const upd = [];

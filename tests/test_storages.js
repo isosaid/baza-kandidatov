@@ -46,6 +46,7 @@ async function run(supportsFilter) {
         setTimeout(() => cb({ error: () => false, data: () => data }), 0);
       }
     };
+    BX_APP = true;   // как после BX24.init внутри портала
   }, { all: ALL, child: CHILD, me: ME, sf: supportsFilter });
 
   await p.click('[data-v=admin]'); await p.waitForTimeout(200);

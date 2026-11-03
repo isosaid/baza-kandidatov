@@ -64,6 +64,7 @@ const DISK = {
         setTimeout(() => cb({ error: () => false, data: () => data }), 0);
       }
     };
+    BX_APP = true;   // как после BX24.init внутри портала
   }, { disk: DISK, resumeSrc: RESUME.toString() });
 
   const ok = [];
