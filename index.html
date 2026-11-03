@@ -122,6 +122,13 @@ textarea.inp{resize:vertical;min-height:96px;font-size:14.5px;padding:13px 15px;
 @media(max-width:860px){.g2,.g3,.g4{grid-template-columns:1fr}}
 
 .chip-row{display:flex;flex-wrap:wrap;gap:8px}
+/* вкладки «Подбор / Все резюме» */
+.seg{display:inline-flex;gap:4px;padding:4px;background:#E9ECE6;border-radius:12px;margin-bottom:18px;max-width:100%;overflow-x:auto}
+.seg button{border:0;background:transparent;font:inherit;font-size:13.5px;font-weight:600;color:var(--ink-soft);padding:9px 16px;border-radius:9px;cursor:pointer;white-space:nowrap}
+.seg button:hover{color:var(--ink)}
+.seg button[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(20,31,53,.12)}
+.seg button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.seg-n{font-weight:500;color:var(--muted);margin-left:4px}
 /* папка с резюме */
 .folder-card{display:flex;align-items:center;gap:14px;border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:var(--surface)}
 .folder-ic{flex:0 0 44px;height:44px;border-radius:10px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center}
@@ -300,15 +307,15 @@ body.locked #login{display:flex}
   <nav class="primary">
     <button class="nav-item active" data-v="match">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M11 11L14.5 14.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-      <span data-i="navMatch">Поиск кандидатов</span>
+      <span data-i="navMatch">Поиск кандидатов</span><span class="tag" id="navBaseCnt">0</span>
     </button>
     <button class="nav-item" data-v="detail" id="navDetail" hidden>
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.5"/><path d="M3 14c0-2.8 2.2-4.5 5-4.5s5 1.7 5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
       <span data-i="navDetail">Карточка кандидата</span>
     </button>
-    <button class="nav-item" data-v="base">
+    <button class="nav-item" data-v="base" hidden>
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="2.3" y="2.5" width="11.4" height="11" rx="1.4" stroke="currentColor" stroke-width="1.3"/><path d="M2.3 6h11.4M5.5 6v7.5" stroke="currentColor" stroke-width="1.3"/></svg>
-      <span data-i="navBase">Все резюме</span><span class="tag" id="navBaseCnt">0</span>
+      <span data-i="navBase">Все резюме</span>
     </button>
     <button class="nav-item" data-v="fav">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 13.2 3.6 15l.9-4.8L1 6.9l4.9-.6L8 2l2.1 4.3 4.9.6-3.5 3.3.9 4.8Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
@@ -352,6 +359,10 @@ body.locked #login{display:flex}
 
 <!-- ============ ПОИСК КАНДИДАТОВ ============ -->
 <section class="screen active" id="v-match">
+  <div class="seg" role="tablist" aria-label="Поиск кандидатов">
+    <button type="button" role="tab" data-tab="match" onclick="go('match')">Подбор по требованиям</button>
+    <button type="button" role="tab" data-tab="base" onclick="go('base')">Все резюме <span class="seg-n" data-basecnt></span></button>
+  </div>
   <div class="section-title-row">
     <div>
       <h2 data-i="searchH">Кого вы ищете?</h2>
@@ -422,6 +433,10 @@ body.locked #login{display:flex}
 
 <!-- ============ ВСЕ РЕЗЮМЕ ============ -->
 <section class="screen" id="v-base">
+  <div class="seg" role="tablist" aria-label="Поиск кандидатов">
+    <button type="button" role="tab" data-tab="match" onclick="go('match')">Подбор по требованиям</button>
+    <button type="button" role="tab" data-tab="base" onclick="go('base')">Все резюме <span class="seg-n" data-basecnt></span></button>
+  </div>
   <div class="section-title-row">
     <div><h2 data-i="baseH">Все резюме</h2>
       <p data-i="baseP">Полная база: загруженные с Диска Битрикс24 и вручную. Позиция берётся из названия папки, остальное разбирается из текста резюме.</p></div>
@@ -1979,6 +1994,7 @@ function renderBase(){
   });
   baseCnt.textContent = rows.length + ' / ' + DATA.length;
   navBaseCnt.textContent = DATA.length;
+  document.querySelectorAll('[data-basecnt]').forEach(e=>e.textContent = DATA.length);
   if(!DATA.length){ tblBase.innerHTML=''; baseEmpty.innerHTML=`<div class="empty"><div class="big">${esc(T('emptyBase'))}</div><div>${esc(T('emptyBaseSub'))}</div></div>`; renderScans(); return; }
   if(!rows.length){ tblBase.innerHTML=''; baseEmpty.innerHTML=`<div class="empty"><div class="big">${esc(T('nothing'))}</div><div>${esc(T('nothingSub'))}</div></div>`; renderScans(); return; }
   baseEmpty.innerHTML='';
@@ -3795,7 +3811,8 @@ function go(v){
   document.querySelectorAll('.screen').forEach(e=>e.classList.remove('active'));
   document.getElementById('v-'+v).classList.add('active');
   // карточка открывается из списка — в меню подсвечиваем раздел, откуда пришли
-  const navV = v==='detail' ? (BACK_TO||'match') : v;
+  const navV = v==='detail' ? (BACK_TO==='fav' ? 'fav' : 'match') : (v==='base' ? 'match' : v);
+  document.querySelectorAll('.seg [data-tab]').forEach(t=>t.setAttribute('aria-selected', String(t.dataset.tab===v)));
   document.querySelectorAll('.nav-item').forEach(b=>{
     const on = b.dataset.v===navV; b.classList.toggle('active',on);
     if(on) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current');

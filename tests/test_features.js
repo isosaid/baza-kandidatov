@@ -102,7 +102,7 @@ const RELOC = [
   check('пол определён всем', data.every(c => c.g), JSON.stringify(data.map(c => c.g)));
 
   // ---- фильтр по категории на вкладке «Все резюме» ----
-  await p.click('[data-v=base]'); await p.waitForTimeout(300);
+  await p.click('#v-match [data-tab=base]'); await p.waitForTimeout(300);
   const chips = await p.locator('#catChips .cat').allTextContents();
   check('кнопки категорий построены', chips.length >= 2, chips.join(' | '));
   await p.locator('#catChips .cat').nth(1).click(); await p.waitForTimeout(300);
