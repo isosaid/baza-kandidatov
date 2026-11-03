@@ -1584,6 +1584,8 @@ function openDb(){
       if(!db.objectStoreNames.contains('f')) db.createObjectStore('f'); };
     r.onsuccess = e => { DB=e.target.result; res(DB); };
     r.onerror = e => rej(e);
+    // база занята другой вкладкой платформы — иначе запуск молча висел бы вечно
+    r.onblocked = () => rej(new Error('База в браузере занята другой вкладкой платформы. Закройте остальные вкладки с «Базой кандидатов» и обновите страницу.'));
   });
 }
 function fileGet(id){
@@ -3794,8 +3796,25 @@ impIn.addEventListener('change', async e=>{
   catch(err){ alert(T('badFile')); }
 });
 
+/* Настройки портала в поля — сразу при загрузке страницы, не дожидаясь входа
+   и открытия базы в браузере. Раньше это стояло в конце запуска, и стоило
+   одному из ранних шагов не пройти (например, база заблокирована второй
+   открытой вкладкой), как поля молча оставались пустыми. */
+function applyPortalDefaults(){
+  const bv = document.getElementById('buildVer'); if(bv) bv.textContent = BUILD;
+  bxHook.value   = localStorage.getItem('avb_hook')   || DEFAULT_HOOK;
+  bxFolder.value = localStorage.getItem('avb_folder') || DEFAULT_FOLDER;
+  localStorage.setItem('avb_hook', bxHook.value);
+  localStorage.setItem('avb_folder', bxFolder.value);
+  bxPathShow(); bxFolder.addEventListener('input', bxPathShow); hookHint();
+  bxHook.addEventListener('input',   ()=>localStorage.setItem('avb_hook',   bxHook.value.trim()));
+  bxFolder.addEventListener('input', ()=>localStorage.setItem('avb_folder', bxFolder.value.trim()));
+}
+applyPortalDefaults();
+
 /* старт */
 (async function(){
+ try{
   await requireLogin();
   await openDb(); DATA = await dbAll();
   await moveInlineFiles();
@@ -3810,17 +3829,18 @@ impIn.addEventListener('change', async e=>{
     }
     if(upd.length) await dbPut(upd); }
   skDict.value = localStorage.getItem('avb_skills') || DEFAULT_SKILLS;
-  { const bv = document.getElementById('buildVer'); if(bv) bv.textContent = BUILD; }
-  bxHook.value = localStorage.getItem('avb_hook') || DEFAULT_HOOK;
-  bxFolder.value = localStorage.getItem('avb_folder') || DEFAULT_FOLDER;
-  localStorage.setItem('avb_hook', bxHook.value);
-  localStorage.setItem('avb_folder', bxFolder.value);
-  bxPathShow(); bxFolder.addEventListener('input', bxPathShow); hookHint();
-  bxHook.addEventListener('input', ()=>localStorage.setItem('avb_hook', bxHook.value.trim()));
-  bxFolder.addEventListener('input', ()=>localStorage.setItem('avb_folder', bxFolder.value.trim()));
   setLang(LANG); refresh(); armSync(); renderMe(); go('match');
   gdBoot();   // подтянуть общую базу из Drive (ID берём из ?db=… или из памяти браузера)
   bootSync(); // первая синхронизация с Диском на новом компьютере — сама, без нажатий
+ }catch(e){
+  /* раньше сбой на любом шаге запуска обрывал его молча: экран выглядел рабочим,
+     а половина платформы не поднималась. Теперь причина видна. */
+  console.error('Запуск платформы прерван:', e);
+  const bv = document.getElementById('buildVer');
+  if(bv) bv.insertAdjacentHTML('afterend',
+    ' · <span style="color:var(--bad,#b3261e)">запуск прерван: '+esc(e && e.message || String(e))+'</span>');
+  try{ toast('Платформа запустилась не полностью: '+(e && e.message || e)); }catch(_){}
+ }
 })();
 
 /* экспорт для автотестов */
