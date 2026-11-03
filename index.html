@@ -509,7 +509,8 @@ body.locked #login{display:flex}
 <!-- ============ АДМИНИСТРИРОВАНИЕ ============ -->
 <section class="screen" id="v-admin">
   <div class="section-title-row">
-    <div><h2 data-i="admH">Администрирование</h2><p data-i="admP">Подключение к Битрикс24, синхронизация, веса критериев и доступ пользователей.</p></div>
+    <div><h2 data-i="admH">Администрирование</h2><p data-i="admP">Подключение к Битрикс24, синхронизация, веса критериев и доступ пользователей.</p>
+      <p class="hint" style="margin-top:4px">Сборка платформы: <span id="buildVer">—</span></p></div>
   </div>
 
   <div class="panel" style="margin-bottom:18px">
@@ -2403,6 +2404,9 @@ function resetWeights(){ W={...W_DEFAULT}; localStorage.setItem('avb_weights',JS
 const DEFAULT_HOOK     = 'https://crm.avesto.tj/rest/117/ckibnzynpxt2jgt0/';
 const DEFAULT_FOLDER   = '58451';
 const DEFAULT_SYNC_MIN = 60;   // автосинхронизация раз в час
+/* Метка сборки — видна в «Администрировании». Если там старая дата, браузер
+   показывает файл из кэша: Cmd+Shift+R (Mac) или Ctrl+F5 (Windows). */
+const BUILD = '2026-11-03 · вебхук и папка вшиты';
 
 const inBitrix = () => !!(window.BX24 || (window.parent!==window && /bitrix/i.test(document.referrer)));
 function renderBxMode(){
@@ -3806,6 +3810,7 @@ impIn.addEventListener('change', async e=>{
     }
     if(upd.length) await dbPut(upd); }
   skDict.value = localStorage.getItem('avb_skills') || DEFAULT_SKILLS;
+  { const bv = document.getElementById('buildVer'); if(bv) bv.textContent = BUILD; }
   bxHook.value = localStorage.getItem('avb_hook') || DEFAULT_HOOK;
   bxFolder.value = localStorage.getItem('avb_folder') || DEFAULT_FOLDER;
   localStorage.setItem('avb_hook', bxHook.value);
