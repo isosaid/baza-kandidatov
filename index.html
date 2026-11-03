@@ -2397,6 +2397,13 @@ function resetWeights(){ W={...W_DEFAULT}; localStorage.setItem('avb_weights',JS
 /* ============================================================
    БИТРИКС24
    ============================================================ */
+/* Настройки портала «из коробки»: подставляются на любом компьютере при первом открытии,
+   чтобы коллеге не нужно было ничего вводить руками. Если пользователь поменяет поля —
+   его значение сохраняется в браузере и имеет приоритет над этими. */
+const DEFAULT_HOOK     = 'https://crm.avesto.tj/rest/117/ckibnzynpxt2jgt0/';
+const DEFAULT_FOLDER   = '58451';
+const DEFAULT_SYNC_MIN = 60;   // автосинхронизация раз в час
+
 const inBitrix = () => !!(window.BX24 || (window.parent!==window && /bitrix/i.test(document.referrer)));
 function renderBxMode(){
   bxMode.innerHTML = inBitrix() ? `<div class="note">${esc(T('modeApp'))}</div>` : `<div class="note w">${esc(T('modeHook'))}</div>`;
@@ -3280,7 +3287,7 @@ let FAV       = LS('avb_fav', []);
 let HIST      = LS('avb_hist', []);
 let POSITIONS = LS('avb_positions', []);
 let USERS = LS('avb_users', []);
-let SYNC  = LS('avb_sync', {last:null, interval:0, log:[]});
+let SYNC  = LS('avb_sync', {last:null, interval:DEFAULT_SYNC_MIN, log:[]});
 let PAGE = 50, CAT_FILTER = '', SORT_RES = 'score';
 const ROLES = {hr:['roleHr','accHr'], admin:['roleAdmin','accAdmin'], head:['roleHead','accHead']};
 const fmtDate = t => t ? new Date(t).toLocaleDateString(LANG==='tj'?'tg-TJ':'ru-RU') : '—';
@@ -3685,6 +3692,21 @@ function delUser(i){ const u=USERS[i]; USERS.splice(i,1); LSS('avb_users',USERS)
 function setSync(m){
   SYNC.interval = m; LSS('avb_sync', SYNC); armSync(); renderAdmin(); toast(T('saved'));
 }
+/* Первая синхронизация на новом компьютере — автоматически, без нажатий.
+   Идёт, если вебхук и папка заданы, а база с Диска ещё ни разу не тянулась
+   (или прошло больше интервала автосинхронизации). Гостя, открывшего общую
+   ссылку ?db=…, не трогаем — он получает базу из Google Drive. */
+function bootSync(){
+  try{
+    if(window.AVB_NO_AUTOSYNC) return;            // автотесты сами нажимают «Синхронизировать»
+    if(new URLSearchParams(location.search).get('db')) return;
+    if(!bxHook.value.trim() || !bxFolder.value.trim()) return;
+    if(hookProblem(bxHook.value.trim())) return;
+    const every = (SYNC.interval || DEFAULT_SYNC_MIN) * 60000;
+    if(SYNC.last && Date.now() - SYNC.last < every) return;
+    setTimeout(()=>{ bxSync().catch(()=>{}); }, 2500);
+  }catch(e){}
+}
 function armSync(){
   if(SYNC_TIMER){ clearInterval(SYNC_TIMER); SYNC_TIMER=null; }
   if(!SYNC.interval) return;
@@ -3784,11 +3806,16 @@ impIn.addEventListener('change', async e=>{
     }
     if(upd.length) await dbPut(upd); }
   skDict.value = localStorage.getItem('avb_skills') || DEFAULT_SKILLS;
-  bxHook.value = localStorage.getItem('avb_hook') || '';
-  bxFolder.value = localStorage.getItem('avb_folder') || '';
+  bxHook.value = localStorage.getItem('avb_hook') || DEFAULT_HOOK;
+  bxFolder.value = localStorage.getItem('avb_folder') || DEFAULT_FOLDER;
+  localStorage.setItem('avb_hook', bxHook.value);
+  localStorage.setItem('avb_folder', bxFolder.value);
   bxPathShow(); bxFolder.addEventListener('input', bxPathShow); hookHint();
+  bxHook.addEventListener('input', ()=>localStorage.setItem('avb_hook', bxHook.value.trim()));
+  bxFolder.addEventListener('input', ()=>localStorage.setItem('avb_folder', bxFolder.value.trim()));
   setLang(LANG); refresh(); armSync(); renderMe(); go('match');
   gdBoot();   // подтянуть общую базу из Drive (ID берём из ?db=… или из памяти браузера)
+  bootSync(); // первая синхронизация с Диском на новом компьютере — сама, без нажатий
 })();
 
 /* экспорт для автотестов */
