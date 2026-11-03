@@ -50,7 +50,7 @@ async function run(supportsFilter) {
   }, { all: ALL, child: CHILD, me: ME, sf: supportsFilter });
 
   await p.click('[data-v=admin]'); await p.waitForTimeout(200);
-  await p.click('button:has-text("Выбрать на Диске")');
+  await p.click('button:has-text("Выбрать папку на Диске")');
   await p.waitForSelector('#bxBrowser button', { timeout: 20000 });
   await p.waitForTimeout(600);
   const roots = await p.locator('#bxBrowser .row button').allTextContents();

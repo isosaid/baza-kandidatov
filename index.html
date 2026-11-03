@@ -122,6 +122,13 @@ textarea.inp{resize:vertical;min-height:96px;font-size:14.5px;padding:13px 15px;
 @media(max-width:860px){.g2,.g3,.g4{grid-template-columns:1fr}}
 
 .chip-row{display:flex;flex-wrap:wrap;gap:8px}
+/* папка с резюме */
+.folder-card{display:flex;align-items:center;gap:14px;border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:var(--surface)}
+.folder-ic{flex:0 0 44px;height:44px;border-radius:10px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center}
+.folder-tx{flex:1;min-width:0}
+.folder-path{font-size:14px;font-weight:600;overflow-wrap:anywhere}
+#bxFields.bx-app{grid-template-columns:1fr}
+@media (max-width:600px){ .folder-card{flex-wrap:wrap} .folder-card .btn{width:100%;justify-content:center} }
 /* категории — крупные кнопки с иконкой */
 .cat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,215px),1fr));gap:10px}
 .cat{display:flex;align-items:center;gap:12px;width:100%;padding:13px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface);
@@ -515,17 +522,21 @@ body.locked #login{display:flex}
 
   <div class="panel" style="margin-bottom:18px">
     <div id="bxMode"></div>
-    <div class="grid g2" style="margin-top:16px">
-      <div class="field"><label data-i="bxHook">Входящий вебхук</label><input class="inp" id="bxHook" placeholder="https://crm.avesto.tj/rest/1/xxxxxxxxxxxx/" oninput="hookHint()">
+    <div class="grid g2" style="margin-top:16px" id="bxFields">
+      <div class="field" id="bxHookField"><label data-i="bxHook">Входящий вебхук</label><input class="inp" id="bxHook" placeholder="https://crm.avesto.tj/rest/1/xxxxxxxxxxxx/" oninput="hookHint()">
         <div id="bxHookErr" class="note r" style="display:none;margin-top:6px;font-size:12.5px"></div>
         <div class="hint" style="margin-top:6px" data-i="bxHookHint">Битрикс24 → Разработчикам → Другое → Входящий вебхук. Права: достаточно disk (Диск).</div></div>
-      <div class="field"><label data-i="bxFolder">Папка с резюме</label>
-        <div class="row" style="flex-wrap:nowrap">
-          <input class="inp" id="bxFolder" placeholder="ID папки" style="max-width:150px">
-          <button class="btn btn-line btn-sm" onclick="bxBrowse()" style="white-space:nowrap"><span data-i="bxPickBtn">Выбрать на Диске</span></button>
+      <div class="field" id="bxFolderField"><label data-i="bxFolder">Папка с резюме</label>
+        <div class="folder-card">
+          <div class="folder-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
+          <div class="folder-tx">
+            <div id="bxFolderPath" class="folder-path"></div>
+            <div class="row" style="gap:6px;margin-top:4px;flex-wrap:nowrap"><span class="hint">ID</span>
+              <input class="inp" id="bxFolder" placeholder="ID папки" style="max-width:110px;padding:4px 8px;font-size:12.5px"></div>
+          </div>
+          <button class="btn btn-primary" onclick="bxBrowse()" style="white-space:nowrap"><span data-i="bxPickBtn">📁 Выбрать папку на Диске</span></button>
         </div>
-        <div id="bxFolderPath" style="margin-top:6px;font-size:12.5px"></div>
-        <div class="hint" style="margin-top:6px" data-i="bxFolderHint">Нажмите «Выбрать на Диске» и дойдите до нужной папки — ID подставится сам. Публичная ссылка вида /folder/xxxx для этого не годится, у неё нет API.</div></div>
+        <div class="hint" style="margin-top:6px" data-i="bxFolderHint">Нажмите «Выбрать папку на Диске» и дойдите до нужной папки — ID подставится сам. Публичная ссылка вида /folder/xxxx для этого не годится, у неё нет API.</div></div>
     </div>
 
     <div id="bxBrowser" hidden style="margin-top:16px"></div>
@@ -731,8 +742,8 @@ ru:{appName:'База кандидатов',appOrg:'ООО «Авесто Гру
  ocrNote:'У этих файлов нет текстового слоя — это сканы или фотографии, текст из них машинно не читается. Откройте карточку и заполните поля вручную либо попросите кандидата прислать резюме файлом Word или PDF с текстом.',
  bxH:'Битрикс24',bxP:'Подключение к Диску портала и синхронизация папки с резюме.',
  bxHook:'Входящий вебхук',bxHookHint:'Битрикс24 → Разработчикам → Другое → Входящий вебхук. Права: достаточно disk (Диск).',
- bxFolder:'Папка с резюме',bxFolderHint:'Нажмите «Выбрать на Диске» и дойдите до нужной папки — ID подставится сам. Публичная ссылка вида /folder/xxxx для этого не годится, у неё нет API.',
- bxPickBtn:'Выбрать на Диске',bxLoading:'читаю Диск…',bxStorages:'Хранилища',bxMyDisk:'Мой Диск',bxCommon:'Общий диск',
+ bxFolder:'Папка с резюме',bxFolderHint:'Нажмите «Выбрать папку на Диске» и дойдите до нужной папки — ID подставится сам. Публичная ссылка вида /folder/xxxx для этого не годится, у неё нет API.',
+ bxPickBtn:'📁 Выбрать папку на Диске',bxLoading:'читаю Диск…',bxStorages:'Хранилища',bxMyDisk:'Мой Диск',bxCommon:'Общий диск',
  bxNoSub:'Вложенных папок нет',bxAll:'Показать все хранилища портала',bxPersonal:'личный диск',bxGroup:'диск группы',
  bxFind:'Поиск по названию хранилища',bxTotal:'всего хранилищ',bxFilesHere:'Резюме прямо в этой папке',bxPickThis:'Выбрать эту папку',bxPicked:'Выбрана папка',
  bxTest:'Проверить связь',bxSync:'Синхронизировать папку',bxDeepLbl:'включая вложенные папки',
@@ -835,7 +846,7 @@ tj:{appName:'Пойгоҳи номзадҳо',appOrg:'ҶДММ «Авесто Г
  bxH:'Битрикс24',bxP:'Пайвастшавӣ ба Диски портал ва ҳамоҳангсозии ҷузвдони резюме.',
  bxHook:'Вебхуки воридотӣ',bxHookHint:'Битрикс24 → Ба таҳиягарон → Дигар → Вебхуки воридотӣ. Ҳуқуқҳо: disk (Диск) кифоя аст.',
  bxFolder:'Ҷузвдони резюме',bxFolderHint:'«Дар Диск интихоб кардан»-ро пахш кунед ва то ҷузвдони лозимӣ равед — ID худаш гузошта мешавад. Истиноди оммавии /folder/xxxx барои ин мувофиқ нест, API надорад.',
- bxPickBtn:'Дар Диск интихоб кардан',bxLoading:'Диск хонда мешавад…',bxStorages:'Анборҳо',bxMyDisk:'Диски ман',bxCommon:'Диски умумӣ',
+ bxPickBtn:'📁 Ҷузвдонро дар Диск интихоб кардан',bxLoading:'Диск хонда мешавад…',bxStorages:'Анборҳо',bxMyDisk:'Диски ман',bxCommon:'Диски умумӣ',
  bxNoSub:'Ҷузвдони дохилӣ нест',bxAll:'Ҳамаи анборҳои порталро нишон додан',bxPersonal:'диски шахсӣ',bxGroup:'диски гурӯҳ',
  bxFind:'Ҷустуҷӯ аз рӯи номи анбор',bxTotal:'ҳамагӣ анбор',bxFilesHere:'Резюме дар худи ҳамин ҷузвдон',bxPickThis:'Ҳамин ҷузвдонро интихоб кардан',bxPicked:'Ҷузвдони интихобшуда',
  bxTest:'Санҷиши пайваст',bxSync:'Ҳамоҳангсозии ҷузвдон',bxDeepLbl:'бо ҷузвдонҳои дохилӣ',
@@ -2409,7 +2420,7 @@ const DEFAULT_FOLDER   = '58451';
 const DEFAULT_SYNC_MIN = 60;   // автосинхронизация раз в час
 /* Метка сборки — видна в «Администрировании». Если там старая дата, браузер
    показывает файл из кэша: Cmd+Shift+R (Mac) или Ctrl+F5 (Windows). */
-const BUILD = '2026-11-03 · вебхук и папка вшиты';
+const BUILD = '2026-11-03 · приложение Битрикс24, без вебхука в коде';
 
 /* Внутри Битрикс24 (локальное приложение) подключаем библиотеку BX24: запросы идут от имени
    того, кто открыл платформу, с правами приложения — вебхук не нужен. */
@@ -2428,6 +2439,10 @@ function bxAppInit(){
 const inBitrix = () => BX_APP;
 function renderBxMode(){
   bxMode.innerHTML = inBitrix() ? `<div class="note">${esc(T('modeApp'))}</div>` : `<div class="note w">${esc(T('modeHook'))}</div>`;
+  // внутри портала вебхук не нужен — поле убираем, папка на всю ширину
+  const hf = document.getElementById('bxHookField'), fs = document.getElementById('bxFields');
+  if(hf) hf.hidden = inBitrix();
+  if(fs) fs.classList.toggle('bx-app', inBitrix());
 }
 function renderBxHow(){
   bxHow.innerHTML = LANG==='tj' ? `
@@ -2519,6 +2534,7 @@ async function bxBrowse(){
     const items = [];
     let me = null;
     try{ me = await bxCall('user.current',{}); }catch(e){}
+    if(!me){ try{ me = await bxCall('profile',{}); }catch(e){} }      // profile не требует права «Пользователи»
     // у вебхука только право «Диск» — номер владельца берём из самой ссылки /rest/<номер>/<ключ>/
     if(!me){ const m = (bxHook.value||'').match(/\/rest\/(\d+)\//); if(m) me = {ID:m[1]}; }
     // Ответ на фильтр обязательно перепроверяем: часть порталов фильтр
@@ -2540,6 +2556,13 @@ async function bxBrowse(){
       .forEach(x=>{ if(x.ROOT_OBJECT_ID) items.push({id:x.ROOT_OBJECT_ID, name:x.NAME||T('bxCommon')}); });
     if(!items.length){ return bxAllStorages(); }
     bxRender(bxUniqRows(items), null, 0, true);
+    // быстрый выбор папки по умолчанию («Резюме»)
+    if(DEFAULT_FOLDER && bxFolder.value.trim()!==DEFAULT_FOLDER){
+      const panel = bxBrowser.querySelector('.panel');
+      if(panel) panel.insertAdjacentHTML('afterbegin', `<div class="note" style="margin-bottom:12px;display:flex;align-items:center;gap:10px;justify-content:space-between">
+        <span>Папка с резюме по умолчанию — <b>ID ${esc(DEFAULT_FOLDER)}</b></span>
+        <button class="btn btn-primary btn-sm" onclick="bxPickDefault()">Выбрать её</button></div>`);
+    }
   }catch(e){
     bxBrowser.innerHTML = `<div class="note r">${esc(T('bxFail'))} — ${esc(e.message)}<br>${esc(T('bxCors'))}</div>`;
   }
@@ -2635,9 +2658,9 @@ function bxPathShow(){
   const el = document.getElementById('bxFolderPath'); if(!el) return;
   const id = bxFolder.value.trim();
   let saved = null; try{ saved = JSON.parse(localStorage.getItem('avb_folder_path')||'null'); }catch(e){}
-  el.innerHTML = !id ? '' : (saved && saved.id===id)
-    ? `Путь на Диске: <b>${esc(saved.path)}</b>`
-    : `<span class="hint">Путь к папке ID ${esc(id)} пока неизвестен</span> <button class="btn btn-ghost btn-sm" style="padding:0 4px" onclick="bxPathResolve()">Показать путь</button>`;
+  el.innerHTML = !id ? `<span class="hint" style="font-weight:400">Папка не выбрана</span>` : (saved && saved.id===id)
+    ? esc(saved.path)
+    : `<span class="hint" style="font-weight:400">Папка ID ${esc(id)}</span> <button class="btn btn-ghost btn-sm" style="padding:0 4px" onclick="bxPathResolve()">Показать путь</button>`;
 }
 function bxPathSave(id, path){ try{ localStorage.setItem('avb_folder_path', JSON.stringify({id:String(id), path})); }catch(e){} bxPathShow(); }
 async function bxPathResolve(){
@@ -2655,6 +2678,10 @@ async function bxPathResolve(){
     if(storageId){ try{ const st = await bxCall('disk.storage.get',{id:storageId}); if(st && st.NAME) names.unshift(st.NAME); }catch(e){} }
     bxPathSave(id, names.join(' / ') || ('ID '+id));
   }catch(e){ el.innerHTML = `<span class="hint">Не удалось определить путь: ${esc(e.message)}</span>`; }
+}
+async function bxPickDefault(){
+  bxFolder.value = DEFAULT_FOLDER; localStorage.setItem('avb_folder', DEFAULT_FOLDER);
+  bxBrowser.hidden = true; bxPathShow(); await bxPathResolve(); toast(T('saved'));
 }
 function bxPick(id){
   bxFolder.value = id;

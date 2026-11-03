@@ -73,7 +73,7 @@ const DISK = {
   await p.click('[data-v=admin]'); await p.waitForTimeout(200);
 
   // 1. список хранилищ
-  await p.click('button:has-text("Выбрать на Диске")');
+  await p.click('button:has-text("Выбрать папку на Диске")');
   await p.waitForSelector('#bxBrowser .row', { timeout: 5000 });
   const storages = await p.locator('#bxBrowser .row button').allTextContents();
   check('показаны хранилища Диска', storages.some(s => s.includes('Мой Диск')), storages.join(' | '));
