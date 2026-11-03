@@ -1627,6 +1627,11 @@ async function getResumeBlob(rec){
   if(!rec) return null;
   const b = await fileGet(rec.id); if(b) return b;
   if(rec.fileData){ try{ return await (await fetch(rec.fileData)).blob(); }catch(e){} }
+  if(String(rec.id).startsWith('bx:') && await srvApi()){                // файл прямо из папки на Диске портала
+    // карточка рисуется дважды подряд — второй вызов ждёт тот же запрос, а не качает заново
+    if(SRV_LAST.id !== rec.id) SRV_LAST = {id:rec.id, p: fetch(srvFileUrl(rec.id), {credentials:'same-origin'}).then(r=>r.ok ? r.blob() : null).catch(()=>null)};
+    const bl = await SRV_LAST.p; if(bl) return bl; SRV_LAST = {id:null, p:null};
+  }
   if(rec.gdFileId && (GD_TOKEN || GD_API_KEY)){
     try{
       const url = `https://www.googleapis.com/drive/v3/files/${rec.gdFileId}?alt=media` + (GD_TOKEN ? '' : '&key='+encodeURIComponent(GD_API_KEY));
@@ -2739,6 +2744,11 @@ function bxFileUrl(f){
   return {url:u.href, wasHttp, where};
 }
 async function bxFetchFile(f){
+  if(f.SRV){
+    const r = await fetch(srvFileUrl(f.ID), {credentials:'same-origin'});
+    if(!r.ok){ const j = await r.json().catch(()=>({})); const e = new Error('файл не открылся: '+(j.error||('HTTP '+r.status))); e.kind='http'; throw e; }
+    return r.blob();
+  }
   const {url, wasHttp, where} = bxFileUrl(f);
   let resp;
   try{ resp = await fetch(url); }
@@ -2768,6 +2778,16 @@ async function bxTestDownload(){
   document.getElementById('bxLog').innerHTML='';
   const root = bxFolder.value.trim();
   if(!root){ bxLog('⚠ Сначала выберите папку с резюме («Выбрать на Диске»).','w'); return; }
+  if(await srvApi()){
+    try{
+      const t0 = Date.now(); const j = await srvList(root);
+      bxLog('✓ Сервер портала: папок '+j.folders+', резюме '+j.count+' — за '+((Date.now()-t0)/1000).toFixed(1)+' с','ok');
+      if(!j.count){ bxLog('✕ В папке нет резюме (PDF, DOCX, DOC, RTF, TXT).','e'); return; }
+      const f = {...j.items[0], SRV:true}; const blob = await bxFetchFile(f);
+      bxLog('✓ Файлы открываются прямо из папки: '+esc(f.NAME)+' — '+Math.round(blob.size/1024)+' КБ. Можно запускать «Синхронизировать папку».','ok');
+      return;
+    }catch(e){ bxLog('⚠ Сервер портала: '+esc(e.message)+' — проверяем через Битрикс24','w'); }
+  }
   bxLog('… ищем первое резюме в папке');
   let found = null, seen = 0;
   async function find(id, path, depth){
@@ -2789,6 +2809,27 @@ async function bxTestDownload(){
     bxLog('✕ '+esc(e.message),'e');
     if(e.kind==='net') bxLog('Сервер всё ещё не разрешает скачивание с сайта платформы. Если настройку только что меняли — проверьте, что nginx перезагружен, и обновите эту страницу (Ctrl+Shift+R).','w');
   }
+}
+/* Если платформа лежит на сервере портала рядом с api.php (bitrix/api.php в репозитории),
+   Диск читается прямо на сервере: список — одним запросом, файл — по ссылке api.php?a=file.
+   Без api.php (GitHub, свой компьютер) — как раньше, через REST. */
+let SRV_OK = null, SRV_USER = null, SRV_LAST = {id:null, p:null};
+async function srvApi(){
+  if(SRV_OK !== null) return SRV_OK;
+  if(!/^https?:$/.test(location.protocol) || location.hostname==='isosaid.github.io'){ SRV_OK = false; return false; }
+  try{
+    const r = await fetch('api.php?a=ping', {credentials:'same-origin', cache:'no-store'});
+    const j = await r.json();
+    SRV_OK = !!(j && j.ok); SRV_USER = j && j.user || null;
+  }catch(e){ SRV_OK = false; }
+  return SRV_OK;
+}
+const srvFileUrl = id => 'api.php?a=file&id='+encodeURIComponent(String(id).replace(/^bx:/,''))+'&root='+encodeURIComponent(bxFolder.value.trim()||DEFAULT_FOLDER||'');
+async function srvList(root){
+  const r = await fetch('api.php?a=list&root='+encodeURIComponent(root), {credentials:'same-origin', cache:'no-store'});
+  const j = await r.json().catch(()=>({ok:false, error:'HTTP '+r.status}));
+  if(!j.ok) throw new Error(j.error || ('HTTP '+r.status));
+  return j;
 }
 async function bxSync(){
   document.getElementById('bxLog').innerHTML=''; bxProg.style.display='block'; bxProg.firstElementChild.style.width='0%';
@@ -2815,12 +2856,25 @@ async function bxSync(){
         }
       }
     }
-    bxLog('… '+esc(T('bxRead')));
-    document.getElementById('bxLog').appendChild(live);
-    bxProg.firstElementChild.style.width='3%';
-    await walk(root, []);
-    live.remove();
-    bxLog('✓ просмотрено папок: '+nFolders,'ok');
+    let srv = null;
+    if(await srvApi()){
+      try{
+        bxLog('… читаем папку прямо на сервере портала');
+        srv = await srvList(root);
+        if(!BX_ROOT_NAME && srv.root) BX_ROOT_NAME = srv.root.name;
+        srv.items.forEach(it=>files.push({...it, folder:vacancyFromPath(it.PATH, BX_ROOT_NAME), personDir:personDirFromPath(it.PATH), SRV:true}));
+        nFolders = srv.folders;
+        bxLog('✓ просмотрено папок: '+nFolders+' за '+(srv.ms/1000).toFixed(1)+' с','ok');
+      }catch(e){ srv = null; files.length = 0; bxLog('⚠ Сервер портала не отдал список ('+esc(e.message)+') — читаем через Битрикс24','w'); }
+    }
+    if(!srv){
+      bxLog('… '+esc(T('bxRead')));
+      document.getElementById('bxLog').appendChild(live);
+      bxProg.firstElementChild.style.width='3%';
+      await walk(root, []);
+      live.remove();
+      bxLog('✓ просмотрено папок: '+nFolders,'ok');
+    }
     bxLog('✓ '+esc(T('bxFound'))+': '+files.length,'ok');
     const existing = new Set(DATA.map(c=>c.id));
     const fresh=[]; let errCount=0, netFails=0, okDownloads=0, stopped=null, metaCnt=0;
@@ -2847,7 +2901,7 @@ async function bxSync(){
             const txt = await readFileText(new File([blob], f.NAME));
             const full = parseResume(txt,{id,file:f.NAME,folder:f.folder,size:blob.size,source:'bitrix',url:f.DETAIL_URL,
               mtime:old.applied, fileMime: blob.type || mimeByName(f.NAME)});
-            await filePut(id, blob); full.hasFile = true;
+            if(f.SRV) full.srv = true; else { await filePut(id, blob); full.hasFile = true; }
             Object.assign(old, full, {name: full.name||old.name, status: old.status, verdict: old.verdict, added: old.added, applied: old.applied||full.applied, meta:false});
             ch = true;
           }catch(e){ if(e.kind==='net'){ netFails++; if(netFails>=3 && !okDownloads) stopped = e; } }
@@ -2855,7 +2909,7 @@ async function bxSync(){
         else if(old && !old.meta && !old.hasFile && !old.fileData && !old.gdFileId && !stopped){
           // раньше из Битрикс сохранялся только текст — докачиваем сам файл для Google Drive
           try{ const rb = await bxFetchFile(f); okDownloads++;
-               await filePut(id, rb); old.hasFile = true; old.fileMime = rb.type || mimeByName(f.NAME); ch = true; }
+               if(f.SRV) old.srv = true; else { await filePut(id, rb); old.hasFile = true; } old.fileMime = rb.type || mimeByName(f.NAME); ch = true; }
           catch(e){ if(e.kind==='net'){ netFails++; if(netFails>=3 && !okDownloads) stopped = e; } }
         }
         if(ch) await dbPut([old]);
@@ -2866,10 +2920,12 @@ async function bxSync(){
       try{
         const blob = await bxFetchFile(f); okDownloads++;
         const txt = await readFileText(new File([blob], f.NAME));
-        const c = parseResume(txt,{id,file:f.NAME,folder:f.folder,size:blob.size,source:'bitrix',url:f.DETAIL_URL,
+        const c = parseResume(txt,{id,file:f.NAME,folder:f.folder,size:blob.size,source:'bitrix',url:f.DETAIL_URL||null,
           mtime:(f.UPDATE_TIME||f.CREATE_TIME)?Date.parse(f.UPDATE_TIME||f.CREATE_TIME)||null:null,
           fileMime: blob.type || mimeByName(f.NAME)});
-        await filePut(id, blob); c.hasFile = true;
+        if(f.SRV) c.srv = true; else { await filePut(id, blob); c.hasFile = true; }
+        if(f.personDir){ const pd = personFromDir(f.personDir); c.bxPersonDir = f.personDir;
+          if(pd && pd.name){ c.name = pd.name; c.gender = pickGender(pd.name); } if(pd && pd.applied) c.applied = pd.applied; }
         fresh.push(c); existing.add(id);
         bxLog((c.scan?'⚠ ':'✓ ')+esc(f.NAME)+(c.scan?' — '+esc(T('noLayer')):''), c.scan?'w':'ok');
       }catch(e){
