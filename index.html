@@ -295,7 +295,7 @@ body.locked #login{display:flex}
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M11 11L14.5 14.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
       <span data-i="navMatch">Поиск кандидатов</span>
     </button>
-    <button class="nav-item" data-v="detail" id="navDetail">
+    <button class="nav-item" data-v="detail" id="navDetail" hidden>
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="5.5" r="2.5" stroke="currentColor" stroke-width="1.5"/><path d="M3 14c0-2.8 2.2-4.5 5-4.5s5 1.7 5 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
       <span data-i="navDetail">Карточка кандидата</span>
     </button>
@@ -2199,7 +2199,7 @@ function copyAi(){
 let OPEN_ID=null, BACK_TO='base';
 function openD(id){
   const c = DATA.find(x=>x.id===id); if(!c) return;
-  BACK_TO = document.getElementById('v-match').classList.contains('active') ? 'match' : 'base';
+  BACK_TO = ['match','fav','base'].find(v=>document.getElementById('v-'+v).classList.contains('active')) || BACK_TO || 'base';
   OPEN_ID = id;
   renderDetail(); go('detail');
 }
@@ -2293,7 +2293,7 @@ function renderDetail(){
   const reco = !s||s.noCrit ? '' : (s.out ? T('recoNo') : (s.score>=80 ? T('recoYes') : T('recoMaybe')));
 
   detailOut.innerHTML = `
-  <button class="btn btn-ghost btn-sm" style="margin-bottom:14px" onclick="go('${BACK_TO}')">← ${esc(BACK_TO==='match'?T('backRes'):T('backBase'))}</button>
+  <button class="btn btn-ghost btn-sm" style="margin-bottom:14px" onclick="go('${BACK_TO}')">← ${esc(BACK_TO==='match'?T('backRes'):BACK_TO==='fav'?(LANG==='tj'?'Ба интихобшудаҳо':'Назад к избранному'):T('backBase'))}</button>
   <div class="detail-header">
     <div>
       <h2>${esc(c.name||cvName(c))}</h2>
@@ -3037,7 +3037,7 @@ function gdSignIn(){
   }
   const params = new URLSearchParams({
     client_id: GD_CLIENT_ID,
-    redirect_uri: 'https://isosaid.github.io/baza-kandidatov/',
+    redirect_uri: gdRedirectUri(),
     response_type: 'token',
     scope: GD_SCOPES,
     include_granted_scopes: 'true',
@@ -3045,6 +3045,12 @@ function gdSignIn(){
   });
   localStorage.setItem('avb_gd_return', location.href);
   location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + params;
+}
+/* Адрес возврата после входа в Google — тот, где открыта платформа.
+   Каждый такой адрес должен быть в «Authorized redirect URIs» клиента OAuth в Google Cloud. */
+function gdRedirectUri(){
+  if(location.hostname==='isosaid.github.io') return 'https://isosaid.github.io/baza-kandidatov/';
+  return location.origin + location.pathname.replace(/index\.(html|php)$/i,'');
 }
 function gdSignOut(){
   gdForgetToken();
@@ -3746,8 +3752,10 @@ function crumb(){
 function go(v){
   document.querySelectorAll('.screen').forEach(e=>e.classList.remove('active'));
   document.getElementById('v-'+v).classList.add('active');
+  // карточка открывается из списка — в меню подсвечиваем раздел, откуда пришли
+  const navV = v==='detail' ? (BACK_TO||'match') : v;
   document.querySelectorAll('.nav-item').forEach(b=>{
-    const on = b.dataset.v===v; b.classList.toggle('active',on);
+    const on = b.dataset.v===navV; b.classList.toggle('active',on);
     if(on) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current');
   });
   if(v==='detail') renderDetail();
