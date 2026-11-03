@@ -1107,6 +1107,16 @@ function pickName(raw, fileName){
       return l.split(/\s+/).map(w=>w[0]+w.slice(1).toLowerCase()).join(' ');
     }
   }
+  // ФИО латиницей заглавными: «BERDOV ABDUKARIM» — в строку или по слову в строке
+  const LSTOP = /^(resume|cv|curriculum|vitae|about|me|profile|summary|contact|contacts|experience|work|education|skills|languages|language|hobbies|interests|projects|graphic|designer|design|manager|developer|engineer|specialist|accountant|marketing|sales|phone|email|address|references|certificates|personal|information|objective)$/i;
+  const latCaps = w => /^[A-Z][A-Z'\-]{1,}$/.test(w) && !LSTOP.test(w);
+  for(let i=0;i<lines.length;i++){
+    const ws = lines[i].split(/\s+/);
+    let cand = null;
+    if(ws.length>=2 && ws.length<=3 && ws.every(latCaps)) cand = ws;
+    else if(ws.length===1 && latCaps(ws[0]) && lines[i+1] && /^[A-Z][A-Z'\-]{1,}$/.test(lines[i+1]) && latCaps(lines[i+1])) cand = [ws[0], lines[i+1]];
+    if(cand) return cand.map(w=>w[0]+w.slice(1).toLowerCase()).join(' ');
+  }
   if(fileName){
     const base = fileName.replace(/\.[a-z0-9]+$/i,'').replace(/[_\-]+/g,' ').replace(/\d+/g,'')
       .replace(/\s+/g,' ').trim();
@@ -2295,13 +2305,12 @@ function renderDetail(){
     </div>
     <div class="row">
       ${c.url?`<a class="btn btn-line" href="${esc(c.url)}" target="_blank" rel="noopener">${esc(T('openFile'))}</a>`:''}
-      ${(c.source==='local'||c.url||c.hasFile||c.fileData||c.gdFileId)?`<button class="btn btn-line" onclick="downloadResume(${jsArg(c.id)},${jsArg(cvName(c))})">⬇ Скачать резюме</button>`:''}
     </div>
   </div>
 
   <div class="detail-grid">
     <div>
-      ${c.meta ? '' : `<div class="panel section-block" id="pvBox">
+      ${`<div class="panel section-block" id="pvBox">
         <div class="row" style="justify-content:space-between;margin-bottom:12px">
           <h3 style="margin:0">Резюме</h3>
           <div class="row" id="pvActs" style="display:none">
@@ -2311,77 +2320,13 @@ function renderDetail(){
         </div>
         <div id="pvBody"><p class="hint">Загружаем резюме…</p></div>
       </div>`}
-      <div class="panel section-block">
-        <h3>${esc(T('mainInfo'))}</h3>
-        <div class="grid g2">
-          <div class="field"><label>${esc(T('cName'))}</label><input class="inp" id="edName" value="${esc(c.name||'')}"></div>
-          <div class="field"><label>${esc(T('cPosition'))}</label><input class="inp" id="edPos" value="${esc(posOf(c)||'')}"></div>
-          <div class="field"><label>Организация</label><input class="inp" id="edOrg" value="${esc(c.org||'')}" placeholder="в какую компанию подан"></div>
-          <div class="field"><label>${esc(T('phone'))}</label><input class="inp" id="edPhone" value="${esc(c.phone||'')}"></div>
-          <div class="field"><label>${esc(T('email'))}</label><input class="inp" id="edMail" value="${esc(c.email||'')}"></div>
-          <div class="field"><label>${esc(T('cCityT'))}</label><input class="inp" id="edCity" value="${esc(c.city||'')}"></div>
-          <div class="field"><label>${esc(T('born'))}</label><input class="inp" id="edBirth" type="number" min="1940" max="2012" value="${c.birth||''}"></div>
-          <div class="field"><label>${esc(T('cGender'))}</label><select class="inp" id="edGender">
-            <option value="">${esc(T('genderUnk'))}</option>
-            <option value="м"${c.gender==='м'?' selected':''}>${esc(T('male'))}</option>
-            <option value="ж"${c.gender==='ж'?' selected':''}>${esc(T('female'))}</option></select></div>
-          <div class="field"><label>${esc(T('cReloc'))}</label><select class="inp" id="edReloc">
-            <option value="">${esc(T('relocUnk'))}</option>
-            <option value="yes"${c.relocation==='yes'?' selected':''}>${esc(T('relocYes'))}</option>
-            <option value="no"${c.relocation==='no'?' selected':''}>${esc(T('relocNo'))}</option></select></div>
-        </div>
-      </div>
-
-      <div class="panel section-block">
-        <h3>${esc(T('profInfo'))}</h3>
-        <div class="grid g2">
-          <div class="field"><label>${esc(T('cExpY'))}</label><input class="inp" id="edExp" type="number" step="0.5" min="0" max="50" value="${c.exp??''}"></div>
-          <div class="field"><label>${esc(T('cEduT'))}</label><select class="inp" id="edEdu">
-            ${[0,4,3,2,1].map(l=>`<option value="${l}" ${c.edu===l?'selected':''}>${esc(EDU_NAME[l][LANG])}</option>`).join('')}</select></div>
-          <div class="field"><label>${esc(T('langs'))}</label><input class="inp" id="edLangs" value="${esc((c.langs||[]).join(', '))}"></div>
-          <div class="field"><label>${esc(T('cStatus'))}</label><select class="inp" id="edStatus">
-            ${Object.keys(STATUS).map(k=>`<option value="${k}" ${st===k?'selected':''}>${esc(STATUS[k][LANG])}</option>`).join('')}</select></div>
-          <div class="field"><label>${esc(T('cCat'))}</label><select class="inp" id="edCat">
-            <option value="">—</option>
-            ${CATEGORIES.map(x=>`<option${c.category===x[0]?' selected':''}>${esc(x[0])}</option>`).join('')}</select></div>
-          <div class="field"><label>${esc(T('cApplied'))}</label><input class="inp" value="${esc(fmtDate(c.applied))}" disabled></div>
-        </div>
-        <div class="field" style="margin-top:14px"><label>${esc(T('cSkills'))}</label>
-          <textarea class="inp" id="edSkills" style="min-height:64px">${esc((c.skills||[]).join(', '))}</textarea></div>
-      </div>
-
-      <div class="panel section-block">
-        <h3>${esc(T('twoLayers'))}</h3>
-        <div class="grid g2">
-          <div><div class="hint">${esc(T('layerOrig'))}</div>
-            <div style="margin-top:4px">${c.url?`<a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(cvName(c))}</a>`:esc(cvName(c))}</div>
-            <div class="hint" style="margin-top:4px">${esc(T('layerOrigV'))}</div></div>
-          <div><div class="hint">${esc(T('layerText'))}</div>
-            <div style="margin-top:4px" class="num">${c.chars||0} ${LANG==='tj'?'аломат':'символов'}</div>
-            <div class="hint" style="margin-top:4px">${esc(T('layerTextV'))}</div></div>
-        </div>
-      </div>
-
-      <div class="panel section-block">
-        <h3>${esc(T('rawText'))}</h3>
-        <div class="raw">${c.raw?esc(c.raw.slice(0,8000)):esc(T('noText'))}</div>
-      </div>
     </div>
 
     <div class="ai-panel">
       ${c.meta ? `
       <h4 style="margin-bottom:8px">Резюме ещё не разобрано</h4>
-      <p class="hint" style="margin-bottom:10px">Битрикс24 не отдал платформе сам файл, поэтому поля пустые, а процент не считается.</p>
-      <ol style="padding-left:18px;font-size:13px;line-height:1.7;margin-bottom:12px">
-        <li>${c.url?`<a href="${esc(c.url)}" target="_blank" rel="noopener">Откройте резюме в Битрикс24</a>`:'Откройте резюме в Битрикс24'} и скачайте файл.</li>
-        <li>Перетащите его сюда или выберите кнопкой.</li>
-      </ol>
-      <div id="metaDrop" style="border:1.5px dashed var(--line);border-radius:10px;padding:18px;text-align:center;font-size:13px;cursor:pointer"
-        onclick="metaIn.click()" ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
-        ondragleave="this.style.borderColor='var(--line)'"
-        ondrop="event.preventDefault();this.style.borderColor='var(--line)';fillFromFile(event.dataTransfer.files[0])">
-        Перетащите файл резюме сюда<br><span class="hint">PDF, DOCX, DOC, RTF, TXT</span></div>
-      <input type="file" id="metaIn" hidden accept=".pdf,.docx,.doc,.txt,.rtf" onchange="fillFromFile(this.files[0])">` :
+      <p class="hint" style="margin-bottom:12px">Битрикс24 не отдал платформе сам файл, поэтому процент не считается.
+        Скачайте резюме в Битрикс24 и перетащите его в блок «Резюме» слева.</p>` :
       !s||s.noCrit ? `<p class="hint">${esc(T('noScore'))}</p>` : `
       <div class="score-row">
         <div class="dial lg" data-pct="${s.score}" data-color="${s.score>=85?'accent':(s.score>=65?'warn':'danger')}"></div>
@@ -2399,7 +2344,7 @@ function renderDetail(){
     </div>
   </div>`;
   detailOut.querySelectorAll('.dial').forEach(drawDial);
-  if(!c.meta) loadPreview(c);
+  loadPreview(c);
   crumb();
 }
 async function saveCard(){
@@ -3831,7 +3776,7 @@ impIn.addEventListener('change', async e=>{
   { const upd = [];
     for(const c of DATA){
       const tpl = parseFileTemplate(c.file); let ch = false;
-      if(!c.name){ const n = nameFromFile(c.file); if(n){ c.name = n; c.gender = c.gender || pickGender(n); ch = true; } }
+      if(!c.name){ const n = (c.raw && pickName(c.raw, c.file)) || nameFromFile(c.file); if(n){ c.name = n; c.gender = c.gender || pickGender(n); ch = true; } }
       if(tpl && tpl.org && !c.org){ c.org = tpl.org; ch = true; }
       if(tpl && tpl.applied && !c.applied){ c.applied = tpl.applied; ch = true; }
       if(c.name && /[()\[\]{}«»"]/.test(c.name)){ c.name = cleanName(c.name); ch = true; }
