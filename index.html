@@ -2838,7 +2838,13 @@ async function srvList(root){
   if(!j.ok) throw new Error(j.error || ('HTTP '+r.status));
   return j;
 }
+let BX_SYNCING = false;
 async function bxSync(){
+  if(BX_SYNCING){ toast('Синхронизация уже идёт'); return; }   // ежечасный запуск не накладывается на идущий
+  BX_SYNCING = true;
+  try{ await bxSyncRun(); } finally { BX_SYNCING = false; }
+}
+async function bxSyncRun(){
   document.getElementById('bxLog').innerHTML=''; bxProg.style.display='block'; bxProg.firstElementChild.style.width='0%';
   const root = bxFolder.value.trim();
   if(!root){
@@ -3845,12 +3851,15 @@ function setSync(m){
    Идёт, если вебхук и папка заданы, а база с Диска ещё ни разу не тянулась
    (или прошло больше интервала автосинхронизации). Гостя, открывшего общую
    ссылку ?db=…, не трогаем — он получает базу из Google Drive. */
-function bootSync(){
+async function bootSync(){
   try{
     if(window.AVB_NO_AUTOSYNC) return;            // автотесты сами нажимают «Синхронизировать»
     if(new URLSearchParams(location.search).get('db')) return;
-    if(!bxHook.value.trim() || !bxFolder.value.trim()) return;
-    if(hookProblem(bxHook.value.trim())) return;
+    if(!bxFolder.value.trim()) return;
+    // внутри портала вебхук не нужен: хватит библиотеки BX24 или api.php рядом
+    const hook = bxHook.value.trim();
+    const canRead = BX_APP || await srvApi() || (hook && !hookProblem(hook));
+    if(!canRead) return;
     const every = (SYNC.interval || DEFAULT_SYNC_MIN) * 60000;
     if(SYNC.last && Date.now() - SYNC.last < every) return;
     setTimeout(()=>{ bxSync().catch(()=>{}); }, 2500);
