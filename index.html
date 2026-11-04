@@ -501,7 +501,11 @@ body.locked #login{display:flex}
 
   <div class="panel" id="scanCard" style="display:none;margin-top:18px">
     <h3 style="font-size:15px;margin-bottom:12px" data-i="needOcr">Требуют ручного ввода (скан без текстового слоя)</h3>
-    <div class="note w" data-i="ocrNote">У этих файлов нет текстового слоя — это сканы или фотографии, текст из них машинно не читается. Откройте карточку и заполните поля вручную либо попросите кандидата прислать резюме файлом Word или PDF с текстом.</div>
+    <div class="note w">У этих файлов нет текстового слоя — это сканы, фото или резюме, где буквы сохранены картинкой. Платформа распознаёт их сама (первые 2 страницы, русский, таджикский, английский) — после синхронизации или по кнопке ниже. Если и после этого данных нет — попросите кандидата прислать резюме файлом Word или PDF с текстом.</div>
+    <div class="row" style="margin-top:12px;gap:10px;flex-wrap:wrap">
+      <button class="btn btn-primary btn-sm" onclick="ocrScans()">🔍 Распознать сканы</button>
+      <span class="hint" id="ocrStatus"></span>
+    </div>
     <div style="margin-top:12px" id="scanList"></div>
   </div>
 </section>
@@ -753,8 +757,8 @@ ru:{appName:'База кандидатов',appOrg:'ООО «Авесто Гру
  loadH:'Загрузка резюме',loadP:'Файлы обрабатываются прямо в браузере и никуда не отправляются. Повторная загрузка того же файла дубликат не создаёт.',
  dzBig:'Перетащите сюда резюме или папку с резюме',dzSmall:'PDF, DOCX, DOC, TXT, RTF · имя папки становится названием позиции',
  pickFiles:'Выбрать файлы',pickFolder:'Выбрать папку',
- needOcr:'Требуют ручного ввода (скан без текстового слоя)',
- ocrNote:'У этих файлов нет текстового слоя — это сканы или фотографии, текст из них машинно не читается. Откройте карточку и заполните поля вручную либо попросите кандидата прислать резюме файлом Word или PDF с текстом.',
+ needOcr:'Сканы без текстового слоя',
+ ocrNoteOld:'У этих файлов нет текстового слоя — это сканы или фотографии, текст из них машинно не читается. Откройте карточку и заполните поля вручную либо попросите кандидата прислать резюме файлом Word или PDF с текстом.',
  bxH:'Битрикс24',bxP:'Подключение к Диску портала и синхронизация папки с резюме.',
  bxHook:'Входящий вебхук',bxHookHint:'Битрикс24 → Разработчикам → Другое → Входящий вебхук. Права: достаточно disk (Диск).',
  bxFolder:'Папка с резюме',bxFolderHint:'Нажмите «Выбрать папку на Диске» и дойдите до нужной папки — ID подставится сам. Публичная ссылка вида /folder/xxxx для этого не годится, у неё нет API.',
@@ -1740,8 +1744,12 @@ async function downloadResume(id, filename){
 /* ============================================================
    ЧТЕНИЕ ФАЙЛОВ
    ============================================================ */
+/* Таблицы кодировок и стандартные шрифты pdf.js: без них в части PDF с русскими
+   шрифтами текст «пропадает», и файл ошибочно считается сканом. */
+const PDF_ASSETS = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/';
+const pdfOpen = buf => pdfjsLib.getDocument({data:buf, cMapUrl:PDF_ASSETS+'cmaps/', cMapPacked:true, standardFontDataUrl:PDF_ASSETS+'standard_fonts/'}).promise;
 async function textFromPdf(buf){
-  const doc = await pdfjsLib.getDocument({data:buf}).promise;
+  const doc = await pdfOpen(buf);
   let out='';
   const pages = Math.min(doc.numPages, 15);
   for(let p=1;p<=pages;p++){
@@ -1894,10 +1902,100 @@ async function ingestFiles(input){
   refresh();
   gdQueueSave();   // новые резюме сразу уходят в общую базу
 }
+/* ===== Распознавание сканов (OCR) =====
+   Tesseract.js в браузере: первые 2 страницы PDF рендерим в картинку и читаем текст
+   (русский + таджикский + английский). Каждый скан пробуем один раз (ocrTried). */
+const OCR_JS = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+const OCR_LANGS = ['rus','tgk','eng'];
+const OCR_PAGES = 2;
+let OCR_RUNNING = false, OCR_STOP = false, OCR_WORKER = null;
+async function ocrWorker(){
+  if(OCR_WORKER) return OCR_WORKER;
+  if(!window.Tesseract) await loadScript([OCR_JS]);
+  OCR_WORKER = await Tesseract.createWorker(OCR_LANGS, 1, {logger:()=>{}});
+  return OCR_WORKER;
+}
+async function ocrBlob(blob, name){
+  await LIBS_READY;
+  const w = await ocrWorker();
+  const isPdf = /\.pdf$/i.test(name||'') || /pdf/.test(blob.type||'');
+  const images = [];
+  if(isPdf){
+    const doc = await pdfOpen(await blob.arrayBuffer());
+    for(let i=1; i<=Math.min(doc.numPages, OCR_PAGES); i++){
+      const page = await doc.getPage(i);
+      const v1 = page.getViewport({scale:1});
+      const scale = Math.min(3, Math.max(1.5, 2000 / v1.width));       // ~2000 px по ширине — оптимально для распознавания
+      const vp = page.getViewport({scale});
+      const cv = document.createElement('canvas'); cv.width = Math.ceil(vp.width); cv.height = Math.ceil(vp.height);
+      const ctx = cv.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0,0,cv.width,cv.height);
+      await page.render({canvasContext: ctx, viewport: vp}).promise;
+      images.push(cv);
+    }
+  } else if(/^image\//.test(blob.type||'')) images.push(blob);
+  let text = '';
+  for(const img of images){ const r = await w.recognize(img); text += (r.data && r.data.text || '') + '\n\n'; }
+  return text.replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim();
+}
+/* Распознать одного кандидата: текст → разбор → те же поля, что у обычного резюме */
+async function ocrRecord(c){
+  const blob = await getResumeBlob(c);
+  if(!blob) throw new Error('файла нет на этом компьютере');
+  const text = await ocrBlob(blob, c.file);
+  c.ocrTried = Date.now();
+  if(text.length < 80){ await dbPut([c]); return false; }
+  const full = parseResume(text, {id:c.id, file:c.file, folder:c.folder, size:c.size, source:c.source, url:c.url, mtime:c.applied, fileMime:c.fileMime});
+  Object.assign(c, full, {
+    name: (c.bxPersonDir && c.name) ? c.name : (full.name || c.name),
+    status: c.status, verdict: c.verdict, added: c.added, applied: c.applied || full.applied,
+    bxPersonDir: c.bxPersonDir||null, srv: c.srv, hasFile: c.hasFile, gdFileId: c.gdFileId||null, org: c.org||full.org||null,
+    meta: false, scan: false, ocr: true, ocrTried: c.ocrTried
+  });
+  await dbPut([c]);
+  return true;
+}
+async function ocrOne(id, btn){
+  const c = DATA.find(x=>x.id===id); if(!c) return;
+  if(btn){ btn.disabled = true; btn.textContent = '… распознаём (до минуты)'; }
+  try{ const ok = await ocrRecord(c); DATA = await dbAll(); refresh(); renderDetail(); toast(ok ? '✓ Текст распознан' : 'Текст на скане не найден'); }
+  catch(e){ toast('Не удалось распознать: '+(e.message||e)); if(btn){ btn.disabled=false; btn.textContent='🔍 Распознать текст'; } }
+}
+async function ocrScans(opts={}){
+  if(OCR_RUNNING){ OCR_STOP = true; toast('Распознавание останавливается…'); return; }
+  const list = DATA.filter(c=>c.scan && (opts.all || !c.ocrTried));
+  const st = document.getElementById('ocrStatus');
+  if(!list.length){ if(!opts.quiet) toast('Нераспознанных сканов нет'); return; }
+  OCR_RUNNING = true; OCR_STOP = false;
+  const say = m => { if(st) st.textContent = m; const live = document.querySelector('#bxLog .ocr-live'); if(live) live.textContent = m; };
+  if(document.getElementById('bxLog') && opts.log){ const d = document.createElement('div'); d.className = 'w live ocr-live'; document.getElementById('bxLog').appendChild(d); }
+  let ok = 0, empty = 0, fail = 0; const t0 = Date.now();
+  try{
+    say('… загружаем распознавание (один раз, около 15 МБ)');
+    await ocrWorker();
+    for(let i=0;i<list.length && !OCR_STOP;i++){
+      const c = list[i], per = i ? (Date.now()-t0)/i : 0, left = per*(list.length-i);
+      say('… распознаём сканы: '+(i+1)+' из '+list.length+' — '+cvName(c)+(i>=3 ? ' · осталось ≈ '+(left<90e3 ? Math.ceil(left/1000)+' с' : Math.ceil(left/60e3)+' мин') : '')+' · нажмите «Распознать сканы» ещё раз, чтобы остановить');
+      try{ (await ocrRecord(c)) ? ok++ : empty++; }catch(e){ fail++; c.ocrTried = Date.now(); try{ await dbPut([c]); }catch(_){} }
+      if((i+1)%10===0){ DATA = await dbAll(); refresh(); }
+    }
+  } catch(e){
+    say('✕ Распознавание не запустилось: '+(e.message||e)+'. Нужен интернет (библиотека с cdn.jsdelivr.net).');
+    OCR_RUNNING = false; return;
+  }
+  DATA = await dbAll(); refresh(); renderFav();
+  const msg = (OCR_STOP ? '■ Остановлено. ' : '✓ ')+'Распознано: '+ok+(empty ? ' · текст не найден: '+empty : '')+(fail ? ' · не открылись: '+fail : '')+' · за '+((Date.now()-t0)<90e3 ? Math.round((Date.now()-t0)/1000)+' с' : Math.round((Date.now()-t0)/60e3)+' мин');
+  OCR_RUNNING = false; OCR_STOP = false;
+  say(msg); if(opts.log){ document.querySelector('#bxLog .ocr-live')?.classList.remove('live'); }
+  toast(msg);
+}
 function renderScans(){
   const s = DATA.filter(c=>c.scan);
   scanCard.style.display = s.length?'block':'none';
-  scanList.innerHTML = s.map(c=>`<span class="pill warn" style="cursor:pointer" onclick="openD(${jsArg(c.id)})">${esc(cvName(c))}</span>`).join('');
+  const left = s.filter(c=>!c.ocrTried).length;
+  const st = document.getElementById('ocrStatus');
+  if(st && !OCR_RUNNING) st.textContent = 'Сканов: '+s.length+(left!==s.length ? ' · ещё не распознавались: '+left : '');
+  scanList.innerHTML = s.slice(0,60).map(c=>`<span class="pill warn" style="cursor:pointer" onclick="openD(${jsArg(c.id)})">${esc(cvName(c))}</span>`).join('')
+    + (s.length>60 ? `<span class="hint" style="margin-left:6px">и ещё ${s.length-60}</span>` : '');
 }
 
 /* ============================================================
@@ -2333,7 +2431,9 @@ function renderDetail(){
       <div class="file-badges">
         <span class="file-badge" title="Исходный файл: ${esc(c.file||'')}">${esc(cvName(c))}</span>
         <span class="file-badge">${esc(T('source'))}: ${c.source==='bitrix'?'Битрикс24':esc(T('local'))}</span>
-        ${c.scan?`<span class="file-badge" style="color:var(--warn);border-color:#EDDCC2">${esc(T('noText'))}</span>`:''}
+        ${c.scan?`<span class="file-badge" style="color:var(--warn);border-color:#EDDCC2">${esc(T('noText'))}</span>
+          <button class="file-badge" style="cursor:pointer" onclick="ocrOne(${jsArg(c.id)}, this)">🔍 Распознать текст</button>`:''}
+        ${c.ocr?`<span class="file-badge" title="Текст получен распознаванием скана — возможны неточности">распознано со скана</span>`:''}
         ${c.meta?`<span class="file-badge" style="color:var(--warn);border-color:#EDDCC2">только по названию папки — резюме не разобрано</span>`:''}
         ${c.meta&&c.url?`<a class="file-badge" href="${esc(c.url)}" target="_blank" rel="noopener">Открыть резюме в Битрикс24</a>`:''}
       </div>
@@ -2843,6 +2943,7 @@ async function bxSync(){
   if(BX_SYNCING){ toast('Синхронизация уже идёт'); return; }   // ежечасный запуск не накладывается на идущий
   BX_SYNCING = true;
   try{ await bxSyncRun(); } finally { BX_SYNCING = false; }
+  if(DATA.some(c=>c.scan && !c.ocrTried) && !window.AVB_NO_AUTOSYNC) ocrScans({log:true, quiet:true});   // сканы — сразу в распознавание
 }
 async function bxSyncRun(){
   document.getElementById('bxLog').innerHTML=''; bxProg.style.display='block'; bxProg.firstElementChild.style.width='0%';
