@@ -3752,6 +3752,43 @@ function renameFav(id){
   LSS('avb_fav', FAV); renderFav();
   toast('📁 ' + name);
 }
+/* Все резюме подборки — одним ZIP: файлы под именами CV_Фамилия Имя_Дата_Организация
+   в порядке шорт-листа (01_, 02_…) и список кандидатов с баллами и контактами (Список.csv). */
+async function zipFav(id, btn){
+  const f = FAV.find(x=>x.id===id); if(!f || !f.items.length) return;
+  const label = btn ? btn.textContent : '';
+  if(btn) btn.disabled = true;
+  try{
+    await LIBS_READY;
+    if(!window.JSZip) throw new Error(T('zipNoLib'));
+    const zip = new JSZip(), used = new Set(), missing = [];
+    const safe = x => String(x||'').replace(/[\\/:*?"<>|\n\r\t]+/g,' ').replace(/\s+/g,' ').trim().slice(0,120);
+    const rows = [['№','Кандидат','Балл, %','Телефон','Email','Город','Опыт, лет','Файл']];
+    for(let i=0;i<f.items.length;i++){
+      const it = f.items[i], c = DATA.find(x=>x.id===it.id);
+      if(btn) btn.textContent = '… '+(i+1)+' из '+f.items.length;
+      let fileName = '';
+      const blob = c ? await getResumeBlob(c) : null;
+      if(blob){
+        const ext = ((c.file||'').match(/\.[a-z0-9]{2,5}$/i)||[''])[0].toLowerCase() || (/pdf/.test(blob.type)?'.pdf':'');
+        let base = String(i+1).padStart(2,'0')+'_'+safe(cvName(c,false) || it.name), n = base, k = 2;
+        while(used.has((n+ext).toLowerCase())) n = base+' ('+(k++)+')';
+        fileName = n+ext; used.add(fileName.toLowerCase());
+        zip.file(fileName, blob);
+      } else missing.push(it.name);
+      rows.push([i+1, it.name, it.score, c&&c.phone||'', c&&c.email||'', c&&c.city||'', c&&c.exp!=null?c.exp:'', fileName||'файл не найден']);
+    }
+    const csv = '\ufeff'+rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(';')).join('\r\n');
+    zip.file('Список кандидатов.csv', csv);
+    if(btn) btn.textContent = '… упаковываем';
+    const out = await zip.generateAsync({type:'blob', compression:'DEFLATE', compressionOptions:{level:6}});
+    const a = document.createElement('a'); a.href = URL.createObjectURL(out);
+    a.download = safe(f.name||'Подборка')+'_'+new Date().toISOString().slice(0,10)+'.zip';
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 10000);
+    toast('✓ В архиве резюме: '+(f.items.length-missing.length)+' из '+f.items.length+(missing.length?' · не найдены: '+missing.join(', '):''));
+  }catch(e){ toast('Не удалось собрать архив: '+(e.message||e)); }
+  finally{ if(btn){ btn.disabled = false; btn.textContent = label; } }
+}
 function renderFav(){
   fixFavNames();
   const favTotal = FAV.reduce((a,f)=>a+f.items.length,0);
@@ -3766,6 +3803,7 @@ function renderFav(){
         </h3>
         <div class="row">
           <span class="hint">${esc(fmtDate(f.date))} · ${f.items.length} ${esc(T('cands'))}</span>
+          <button class="btn btn-primary btn-sm" onclick="zipFav(${jsArg(f.id)}, this)">⬇ Скачать архивом</button>
           <button class="btn btn-ghost btn-sm" onclick="renameFav(${jsArg(f.id)})">Переименовать</button>
           ${f.crit?`<button class="btn btn-ghost btn-sm" onclick="applyCrit(${jsArg(f.crit)})">${esc(T('repeat'))}</button>`:''}
           <button class="btn btn-ghost btn-sm" style="color:var(--danger)" onclick="delFav(${jsArg(f.id)})">${esc(T('del'))}</button>
