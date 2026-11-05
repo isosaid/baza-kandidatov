@@ -1157,11 +1157,26 @@ function pickName(raw, fileName){
     if(m) return m[1].trim();
   }
   const STOP = /резюме|curriculum|vitae|анкета|cv$|персональн|контакт|образован|опыт|навык|личн|сведен|данные|тарҷума|ҳол|маълумот/i;
-  for(const l of lines){
+  const re1 = new RegExp('^' + WORD + '$');
+  const WSTOP = /^(профиль|профил|обо\s*мне|цель|языки|забонҳо|контакты|навыки|проекты|специалист|менеджер|бухгалтер|юрист|инженер|директор|руководитель|экономист|маркетолог|дизайнер|программист|водитель|оператор|кассир|продавец|ассистент|помощник|аналитик|консультант|переводчик|врач|учитель|преподаватель|секретарь|администратор|логист|кладовщик|охранник|повар|официант|механик|электрик|сварщик|строитель|архитектор|мастер|технолог|агент|торговый|главный|ведущий|старший|младший)$/i;
+  for(let i=0;i<lines.length;i++){
+    const l = lines[i];
     if(l.length>70 || STOP.test(l)) continue;
     if(re3.test(l)) return l;
-    if(/^[А-ЯЁЎҚҒҲҶӢӮ\s\-]{6,60}$/.test(l) && l.split(/\s+/).length>=2 && l.split(/\s+/).length<=4){
-      return l.split(/\s+/).map(w=>w[0]+w.slice(1).toLowerCase()).join(' ');
+    // имя и фамилия крупно, в две строки: «Сорбон» / «Набиев» (дизайнерские шаблоны Canva и т.п.)
+    if(i<12 && re1.test(l) && !WSTOP.test(l) && lines[i+1] && re1.test(lines[i+1]) && !WSTOP.test(lines[i+1]) && !STOP.test(lines[i+1])){
+      const third = lines[i+2] && re1.test(lines[i+2]) && /(вич|вна|зода|зод|заде|ович|евич|овна|евна|кызы|угли)$/i.test(lines[i+2]) ? ' '+lines[i+2] : '';
+      return l+' '+lines[i+1]+third;
+    }
+    const cap = w => w[0]+w.slice(1).toLowerCase();
+    const UP1 = /^[А-ЯЁЎҚҒҲҶӢӮ][А-ЯЁЎҚҒҲҶӢӮ\-]{1,}$/;
+    if(/^[А-ЯЁЎҚҒҲҶӢӮ\s\-]{6,60}$/.test(l) && l.split(/\s+/).length>=2 && l.split(/\s+/).length<=4
+       && !l.split(/\s+/).some(w=>WSTOP.test(w) || /^(по|и|в|на|с|отдела|продажам|работы)$/i.test(w))){
+      return l.split(/\s+/).map(cap).join(' ');
+    }
+    // заглавными, по слову в строке: «ФИРУЗА» / «ШАРИПОВА»
+    if(i<12 && UP1.test(l) && !WSTOP.test(l) && lines[i+1] && UP1.test(lines[i+1]) && !WSTOP.test(lines[i+1]) && !STOP.test(lines[i+1])){
+      return cap(l)+' '+cap(lines[i+1]);
     }
   }
   // ФИО латиницей заглавными: «BERDOV ABDUKARIM» — в строку или по слову в строке
@@ -1176,7 +1191,8 @@ function pickName(raw, fileName){
   }
   if(fileName){
     const base = fileName.replace(/\.[a-z0-9]+$/i,'').replace(/[_\-]+/g,' ').replace(/\d+/g,'')
-      .replace(/\s+/g,' ').trim();
+      .replace(/(^|\s)(cv|resume|résumé|curriculum|vitae|резюме|анкета|new|final|копия|copy)(?=\s|$)/gi,' ')
+      .replace(/[()\[\].,]+/g,' ').replace(/\s+/g,' ').trim();
     const words = base.split(' ').filter(Boolean);
     if(words.length>=2 && words.length<=4 && base.length<60){
       if(re3.test(base)) return base;
@@ -1384,6 +1400,18 @@ function pickPosition(raw, folder){
     pos = pos.replace(/[\(\[].{0,30}[\)\]]/g,'').replace(/\d{4}\s*г?\.?.*/,'').trim();
     if(pos.length>=3 && pos.length<=50) return pos;
   }
+  // подзаголовок под именем в дизайнерских шаблонах: «СПЕЦИАЛИСТ ПО ГЛОБАЛЬНЫМ / ОПЕРАЦИЯМ…»
+  const PROF = /(специалист|менеджер|бухгалтер|юрист|юрисконсульт|инженер|директор|руководител|экономист|маркетолог|дизайнер|программист|разработчик|аналитик|консультант|координатор|переводчик|администратор|ассистент|логист|рекрутер|hr|smm|аудитор|кассир|оператор|водитель|технолог|архитектор|преподавател|учител|врач|мутахассис|developer|manager|specialist|accountant|engineer|designer|analyst|coordinator)/i;
+  const top = raw.split('\n').slice(0,14);
+  for(let i=0;i<top.length;i++){
+    const t = top[i].trim();
+    if(!t || t.length>60 || !PROF.test(t) || /[@\d]|резюме|опыт|образован|контакт|^(ищу|хочу|готов|рассматриваю|владею)/i.test(t)) continue;
+    const parts = [t];
+    for(let k=i+1;k<top.length && k<i+3;k++){ const n = top[k].trim(); if(!n || n.length>60 || /[@\d:]/.test(n)) break; if(/^[A-ZА-ЯЁЎҚҒҲҶӢӮ\s\-]+$/.test(t)!==/^[A-ZА-ЯЁЎҚҒҲҶӢӮ\s\-]+$/.test(n)) break; parts.push(n); }
+    let pos = parts.join(' ').replace(/\s+/g,' ').trim();
+    if(!/[а-яёa-z]/.test(pos)) pos = pos[0] + pos.slice(1).toLowerCase();
+    if(pos.length<=80 && pos.split(' ').length<=9) return pos;
+  }
   return (folder && !PERSON_DIR.test(folder)) ? folder : null;
 }
 function pickLastJob(raw){
@@ -1413,9 +1441,11 @@ const CATEGORIES = [
 ];
 function pickCategory(raw, position, skills){
   const hay = ' ' + norm([position||'', (skills||[]).join(' '), String(raw||'').slice(0,2500)].join(' ')) + ' ';
+  const posH = ' ' + norm(position||'') + ' ';
   let best=null, bestN=0;
   CATEGORIES.forEach(([name,keys])=>{
-    const n = keys.reduce((a,k)=>a + (hasKey(hay,k)?1:0), 0);
+    // совпадение с должностью весит втрое больше, чем упоминание где-то в тексте
+    const n = keys.reduce((a,k)=>a + (hasKey(posH,k)?3:(hasKey(hay,k)?1:0)), 0);
     if(n>bestN){ bestN=n; best=name; }
   });
   return best;
@@ -1847,13 +1877,32 @@ async function textFromPdf(buf){
   for(let p=1;p<=pages;p++){
     const page = await doc.getPage(p);
     const tc = await page.getTextContent();
-    let last=null, line='';
+    /* Пробел ставим по геометрии, а не после каждого куска: конструкторы резюме (Canva, Word)
+       режут слова на куски — «На» «биев», и без этого фамилия не находится поиском.
+       Заголовки с разрядкой («К О Н Т А К Т Ы») склеиваем: граница слова — только промежуток
+       заметно больше межбуквенного. */
+    let last=null, parts=[], endX=null, line='';
+    const LS = /^[A-Za-zА-Яа-яЁёЎўҚқҒғҲҳҶҷӢӣӮӯ](?: [A-Za-zА-Яа-яЁёЎўҚқҒғҲҳҶҷӢӣӮӯ])+$/;   // «К О Н Т А К Т Ы» внутри одного куска
+    const flush = () => {
+      parts.forEach((q,k)=>{
+        const str = LS.test(q.str) ? q.str.replace(/ /g,'') : q.str;
+        if(k && q.gap!==null && !/\s$/.test(line) && !/^\s/.test(str)){
+          if(q.gap > q.fs*0.18 || q.gap < -q.fs*0.5) line += ' ';
+        }
+        line += str;
+      });
+      parts = []; endX = null;
+    };
     tc.items.forEach(it=>{
-      const y = it.transform[5];
-      if(last!==null && Math.abs(y-last)>3){ out+=line.trim()+'\n'; line=''; }
-      line += it.str + (it.hasEOL?'\n':' ');
-      last = y;
+      const y = it.transform[5], x = it.transform[4];
+      const fs = Math.hypot(it.transform[0], it.transform[1]) || 10;
+      if(last!==null && Math.abs(y-last)>Math.max(3, fs*0.4)){ flush(); out+=line.trim()+'\n'; line=''; }
+      parts.push({str:it.str, fs, gap: endX===null ? null : x-endX});
+      if(it.hasEOL){ flush(); line += '\n'; }
+      else endX = x + (it.width||0);
+      if(it.str) last = y;
     });
+    flush();
     out += line.trim()+'\n\n';
   }
   return out;
@@ -1974,7 +2023,10 @@ async function ingestFiles(input){
       c.hasFile = true;
       fresh.push(c); existing.add(id); if(c.scan) scanCnt++;
       if(fresh.length>=100){ await dbPut(fresh); savedFresh += fresh.length; fresh.length = 0; }
-      log((c.scan?'⚠ ':'✓ ')+esc(f.name)+(c.scan?' — '+T('noLayer'):' — '+(c.name||T('noName'))+(c.skills.length?' · '+T('skCnt')+': '+c.skills.length:'')), c.scan?'w':'ok');
+      log((c.scan?'⚠ ':'✓ ')+esc(f.name)+' — '+(c.scan?esc(T('noLayer'))+' · ':'')
+        +`<a href="#" style="color:inherit;font-weight:600" onclick="openD(${jsArg(id)});return false">${esc(c.name||T('noName'))}</a>`
+        +(c.position?' · '+esc(c.position):'')+(c.category?' · '+esc(c.category):'')
+        +(!c.scan&&c.skills.length?' · '+T('skCnt')+': '+c.skills.length:''), c.scan?'w':'ok');
     }catch(e){ log('✕ '+esc(f.name)+' — '+esc(e.message||'ошибка чтения'),'e'); }
     setProg((i+1)/list.length);
   }
