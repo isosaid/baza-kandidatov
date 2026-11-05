@@ -406,11 +406,24 @@ body.locked #login{display:flex}
           <div id="niceBox" style="margin-top:8px"></div>
         </div>
       </div>
+      <div class="field" style="margin-top:14px"><label>Обязанности по вакансии (функционал)</label>
+        <textarea class="inp" id="cDuties" rows="3" placeholder="ведение бухгалтерского учёта, подготовка налоговой отчётности, работа с банками и контрагентами"></textarea>
+        <span class="hint" style="font-size:11.5px">сравнивается с тем, что кандидат делал на прошлых местах; если пусто — берётся описание вакансии сверху</span></div>
+      <div class="grid g3" style="margin-top:14px">
+        <div class="field"><label>Отрасль</label><input class="inp" id="cInd" placeholder="строительство, банк, ритейл"></div>
+        <div class="field"><label>Сертификаты, лицензии</label><input class="inp" id="cCert" placeholder="ACCA, права категории C"></div>
+        <div class="field"><label>Формат работы</label><select class="inp" id="cFormat">
+          <option value="">не важно</option><option value="office">офис</option><option value="remote">удалённо</option><option value="hybrid">гибрид</option></select></div>
+      </div>
       <div class="grid g3" style="margin-top:14px">
         <div class="field"><label data-i="cCity">Город</label><select class="inp" id="cCity"></select></div>
         <div class="field"><label data-i="cLang">Язык</label><select class="inp" id="cLang"></select></div>
         <div class="field"><label data-i="cExtra">Дополнительная информация</label>
           <input class="inp" id="cExtra" placeholder="например: командировки, английский язык, работа с подрядчиками"></div>
+      </div>
+      <div class="row" style="margin-top:12px;gap:18px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink-soft)"><input type="checkbox" id="cManage"> нужен опыт управления командой</label>
+        <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink-soft)"><input type="checkbox" id="cReloc" checked> из другого города — если готов к переезду</label>
       </div>
       <div class="row" style="margin-top:14px">
         <label style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink-soft)">
@@ -790,7 +803,13 @@ ru:{appName:'База кандидатов',appOrg:'ООО «Авесто Гру
  strong:'Сильные стороны',weak:'Чего не хватает',reco:'Рекомендация',
  recoYes:'Пригласить на первичное интервью.',recoMaybe:'Посмотреть резюме, есть пробелы по требованиям.',recoNo:'Не проходит по обязательным требованиям.',
  noScore:'Задайте критерии в поиске, чтобы увидеть оценку соответствия.',
- wPos:'Соответствие должности',wExp:'Опыт работы',wMust:'Обязательные навыки',wNice:'Желательные навыки',wEdu:'Образование',wCity:'Город',wLang:'Языки',
+ wPos:'Соответствие должности и функционала',wExp:'Релевантный опыт',wSkills:'Профессиональные навыки',wEdu:'Образование и сертификаты',wExtra:'Дополнительные требования',
+ wMust:'Обязательные навыки',wNice:'Желательные навыки',wCity:'Город',wLang:'Языки',
+ wPosH:'обязанности из вакансии и реальные обязанности кандидата на прошлых местах',
+ wExpH:'годы опыта в нужных задачах относительно требуемого стажа и опыт в нужной отрасли',
+ wSkillsH:'инструменты, технологии и компетенции из вакансии',
+ wEduH:'требуемое образование, степени, лицензии',
+ wExtraH:'языки, локация или переезд, управление командой, формат работы и прочее из ТЗ',
  wNote:'Веса меняются в настройках. Критерии, которые вы не задали, в расчёте не участвуют.',
  allMust:'все обязательные навыки',expOk:'опыт достаточный',expLow:'опыта меньше требуемого',
  eduOk:'образование подходит',eduLow:'образование ниже требуемого',cityOk:'город совпадает',langOk:'язык есть',posOk:'позиция совпадает',posNo:'должность не совпадает',
@@ -893,7 +912,13 @@ tj:{appName:'Пойгоҳи номзадҳо',appOrg:'ҶДММ «Авесто Г
  strong:'Ҷиҳатҳои қавӣ',weak:'Чӣ намерасад',reco:'Тавсия',
  recoYes:'Ба мусоҳибаи аввалия даъват кардан.',recoMaybe:'Резюмеро дида баромадан, аз рӯи талабот камбудӣ ҳаст.',recoNo:'Аз рӯи талаботи ҳатмӣ намегузарад.',
  noScore:'Барои дидани баҳо дар ҷустуҷӯ меъёрҳо гузоред.',
- wPos:'Мутобиқати вазифа',wExp:'Таҷрибаи кор',wMust:'Малакаҳои ҳатмӣ',wNice:'Малакаҳои матлуб',wEdu:'Маълумот',wCity:'Шаҳр',wLang:'Забонҳо',
+ wPos:'Мутобиқати вазифа ва функсия',wExp:'Таҷрибаи марбут',wSkills:'Малакаҳои касбӣ',wEdu:'Таҳсилот ва сертификатҳо',wExtra:'Талаботи иловагӣ',
+ wMust:'Малакаҳои ҳатмӣ',wNice:'Малакаҳои матлуб',wCity:'Шаҳр',wLang:'Забонҳо',
+ wPosH:'ӯҳдадориҳои вакансия ва ӯҳдадориҳои воқеии номзад дар ҷойҳои пешина',
+ wExpH:'солҳои таҷриба дар корҳои зарурӣ нисбат ба собиқаи талабшуда ва таҷриба дар соҳа',
+ wSkillsH:'асбобҳо, технологияҳо ва салоҳиятҳо аз вакансия',
+ wEduH:'таҳсилоти талабшуда, дараҷаҳо, литсензияҳо',
+ wExtraH:'забонҳо, ҷойгиршавӣ ё кӯчидан, идораи даста, шакли кор ва ғайра аз ТЗ',
  wNote:'Вазнҳо дар танзимот иваз мешаванд. Меъёрҳои нагузошта дар ҳисоб иштирок намекунанд.',
  allMust:'ҳамаи малакаҳои ҳатмӣ',expOk:'таҷриба кофӣ',expLow:'таҷриба камтар аз талабот',
  eduOk:'маълумот мувофиқ',eduLow:'маълумот пасттар аз талабот',cityOk:'шаҳр мувофиқ',langOk:'забон ҳаст',posOk:'вазифа мувофиқ',posNo:'вазифа мувофиқ нест',
@@ -1493,6 +1518,15 @@ function parseQuery(txt){
   if(lg) out.lang = lg[0];
 
   out.skills = pickSkills(src);
+  out.manage = /(управлени[ея]\s+(команд|коллектив|персонал|отдел|подчин)|руковод(ство|ить)\s+(команд|коллектив|отдел)|команд[аоуы]\s+от\s+\d+|в подчинении|подчинённ|подчиненн|team\s*lead|тимлид)/i.test(src);
+  out.reloc  = /(готов[а-яёa-z]*\s+к\s+переезд|релокац|переезд)/i.test(src);
+  out.format = /(удал[её]нн|remote|дистанционн)/i.test(src) ? 'remote' : /гибрид|hybrid/i.test(src) ? 'hybrid' : /(в офисе|офисн[а-яёa-z]* работ)/i.test(src) ? 'office' : '';
+  const ind = src.match(/(?:в|для)\s+(строительн[а-яёa-z]*|банк[а-яёa-z]*|финансов[а-яёa-z]*|торгов[а-яёa-z]*|ритейл[а-яёa-z]*|производствен[а-яёa-z]*|логистическ[а-яёa-z]*|телеком[а-яёa-z]*|энергетическ[а-яёa-z]*|нефтегаз[а-яёa-z]*|медицинск[а-яёa-z]*|фармацевтическ[а-яёa-z]*|IT|ИТ|страхов[а-яёa-z]*|гостиничн[а-яёa-z]*|ресторанн[а-яёa-z]*|сельскохозяйственн[а-яёa-z]*|горнодобывающ[а-яёa-z]*)\s+(?:компани|сфер|отрасл|организац|холдинг|предприяти)/i);
+  const IND_NAME = [['строит','строительство'],['банк','банк'],['финанс','финансы'],['торгов','торговля'],['ритейл','ритейл'],['произв','производство'],
+    ['логист','логистика'],['телеко','телеком'],['энерге','энергетика'],['нефтег','нефтегаз'],['медиц','медицина'],['фармац','фармацевтика'],
+    ['страх','страхование'],['гостин','гостиничный бизнес'],['рестор','рестораны'],['сельск','сельское хозяйство'],['горнод','горнодобыча']];
+  out.ind = ind ? [(IND_NAME.find(([k])=>norm(ind[1]).startsWith(k))||[0, ind[1].toUpperCase()==='ИТ'?'IT':ind[1]])[1]] : [];
+  out.cert = (src.match(/(?<![A-Za-zА-Яа-яЁё])(ACCA|CIMA|CFA|CPA|DipIFR|PMP|PRINCE2|ITIL|CCNA|IELTS|TOEFL|права\s+категори[ия]\s+[A-ZА-Я](?:\s*,\s*[A-ZА-Я])*)(?![A-Za-zА-Яа-яЁё])/gi) || []).map(x=>x.trim());
 
   m = src.match(/(?:нужен|нужна|нужно|требуется|ищем|ищу|вакансия|подбираем|даркор)\s*[:\-–]?\s*([^.,;\n]{3,60})/i);
   const first = src.split(/[.,;\n]/)[0].trim();
@@ -1513,17 +1547,22 @@ function cleanPos(s){
 /* ============================================================
    ВЕСА И ПОДБОР
    ============================================================ */
-/* Город из расчёта убран (решение 28.10.2026): его 7 баллов отданы соответствию должности. */
-const W_DEFAULT = { pos:22, exp:25, must:25, nice:15, edu:8, lang:5 };
-const W_ORDER = ['pos','exp','must','nice','edu','lang'];
-const W_LABEL = {pos:'wPos',exp:'wExp',must:'wMust',nice:'wNice',edu:'wEdu',lang:'wLang'};
+/* Модель оценки (решение 05.11.2026): 5 критериев.
+   pos    — соответствие должности и функционала: название + обязанности из вакансии в опыте кандидата
+   exp    — релевантный опыт: годы относительно требуемых (с поправкой на релевантность) и опыт в отрасли
+   skills — профессиональные навыки: обязательные (вдвое весомее) и желательные
+   edu    — образование и сертификаты: уровень, степени, лицензии
+   extra  — дополнительные требования: языки, город/переезд, управление командой, формат работы, прочее из ТЗ */
+const W_DEFAULT = { pos:25, exp:30, skills:25, edu:10, extra:10 };
+const W_ORDER = ['pos','exp','skills','edu','extra'];
+const W_LABEL = {pos:'wPos',exp:'wExp',skills:'wSkills',edu:'wEdu',extra:'wExtra'};
+const W_HINT  = {pos:'wPosH',exp:'wExpH',skills:'wSkillsH',edu:'wEduH',extra:'wExtraH'};
 let W = loadWeights();
 function loadWeights(){
   try{
     const s = JSON.parse(localStorage.getItem('avb_weights')||'null');
-    if(s && typeof s.city==='number'){            // сохранённые раньше веса: город → к должности
-      s.pos = (+s.pos||0) + s.city; delete s.city;
-      localStorage.setItem('avb_weights', JSON.stringify(s));
+    if(s && !('skills' in s)){                    // веса старой модели (должность/навыки/город/языки) — заменяем новыми
+      localStorage.setItem('avb_weights', JSON.stringify(W_DEFAULT)); return {...W_DEFAULT};
     }
     if(s && W_ORDER.every(k=>typeof s[k]==='number')){ const w={}; W_ORDER.forEach(k=>w[k]=s[k]); return w; }
   }catch(e){}
@@ -1532,71 +1571,123 @@ function loadWeights(){
 
 /* Оценка считается только по заданным критериям: незаданные
    не дают «бесплатных» баллов, их вес распределяется между остальными. */
+/* Ключевые слова обязанностей: слова от 5 букв без служебных, обрезанные до основы */
+const DUTY_STOP = new Set('работа работы работе работать умение умения знание знания опыт опыта наличие наличия требуется требования требований обязанности обязанностей условия компании компания вакансия должность нужен нужна нужно ищем кандидат кандидата который которые также других более менее лет года годы город готов готова желательно обязательно хорошее хорошие отличное высшее образование'.split(' '));
+function dutyKeys(text){
+  const out = [];
+  norm(text).split(/[^a-zа-яёўқғҳҷӣӯ0-9]+/i).forEach(w=>{
+    if(w.length<5 || DUTY_STOP.has(w) || /^\d+$/.test(w)) return;
+    const k = w.slice(0, Math.max(5, w.length-2));
+    if(!out.includes(k)) out.push(k);
+  });
+  return out.slice(0, 40);
+}
+const MANAGE_RX = /(руковод|управлени[ея]\s+(команд|коллектив|персонал|отдел|сотрудник|подчин)|в подчинении|подчинённ|подчиненн|начальник|заведующ|team\s*lead|тимлид|head of|director)/i;
+const FORMAT_RX = {remote:/(удал[её]нн|remote|дистанционн)/i, hybrid:/(гибрид|hybrid)/i, office:/(офис|office)/i};
+
 function scoreCandidate(c, crit){
   const why=[], miss=[], rows=[];
   const cSk = (c.skills||[]).map(norm);
-  const hay = ' ' + norm(c.raw||'') + ' ';
+  const raw = c.raw||'';
+  const hay = ' ' + norm(raw) + ' ';
   const has = s => cSk.includes(norm(s)) || hasKey(hay, s);
   const add = (key, ratio) => rows.push({key, label:T(W_LABEL[key]), weight:W[key], ratio:Math.max(0,Math.min(1,ratio))});
   let outFlag = false;
 
-  if(crit.must && crit.must.length){
-    const ok = crit.must.filter(has), bad = crit.must.filter(s=>!has(s));
-    add('must', ok.length/crit.must.length);
-    if(ok.length) why.push(ok.length===crit.must.length ? T('allMust') : ok.join(', '));
-    bad.forEach(s=>miss.push(s));
-    if(bad.length && crit.strict) outFlag = true;
+  // 1. Соответствие должности и функционала
+  let titleHit = null;
+  if(crit.pos){
+    const p = norm(crit.pos), src = norm((c.position||'')+' '+(posOf(c)||'')+' '+raw.slice(0,500));
+    const words = p.split(' ').filter(w=>w.length>3);
+    titleHit = words.length ? words.filter(w=>src.includes(w.slice(0,Math.max(4,w.length-2)))).length/words.length : (src.includes(p)?1:0);
   }
-  if(crit.nice && crit.nice.length){
-    const ok = crit.nice.filter(has);
-    add('nice', ok.length/crit.nice.length);
-    if(ok.length) why.push(ok.join(', '));
+  const dKeys = crit.duties ? dutyKeys(crit.duties).filter(k=>!(crit.pos && norm(crit.pos).includes(k))) : [];
+  let dutyHit = null;
+  if(dKeys.length >= 3){
+    const found = dKeys.filter(k=>hay.includes(k));
+    dutyHit = Math.min(1, found.length / Math.max(3, dKeys.length*0.6));    // 60% обязанностей в опыте — уже полное совпадение
+    if(dutyHit >= 0.6) why.push('функционал совпадает');
+    else if(dutyHit < 0.25) miss.push('функционал на прошлых местах другой');
   }
+  if(titleHit!==null || dutyHit!==null){
+    const r = titleHit!==null && dutyHit!==null ? 0.4*titleHit + 0.6*dutyHit : (titleHit ?? dutyHit);
+    add('pos', r);
+    if(titleHit!==null && titleHit>=0.5) why.push(T('posOk'));
+    else if(titleHit!==null && titleHit<0.15) miss.push(T('posNo'));
+  }
+
+  // 2. Релевантный опыт: годы (с поправкой на релевантность) + отрасль
+  const relev = titleHit!==null ? Math.max(0.5, titleHit) : 1;           // стаж не по профилю считается наполовину
+  let yearsR = null, indR = null;
   if(crit.exp>0){
-    if(c.exp===null||c.exp===undefined) add('exp', 0.35);
-    else if(c.exp>=crit.exp){ add('exp',1); why.push(T('expOk')+' — '+c.exp+' '+T('yrs')); }
-    else { add('exp', Math.max(0,c.exp/crit.exp)*0.7); miss.push(T('expLow')+' ('+(c.exp??'—')+'/'+crit.exp+')'); }
+    if(c.exp===null||c.exp===undefined) yearsR = 0.35;
+    else if(c.exp>=crit.exp){ yearsR = relev; why.push(T('expOk')+' — '+c.exp+' '+T('yrs')); }
+    else { yearsR = Math.max(0,c.exp/crit.exp)*0.7*relev; miss.push(T('expLow')+' ('+(c.exp??'—')+'/'+crit.exp+')'); }
   }
+  if(crit.ind && crit.ind.length){
+    const ok = crit.ind.some(i=>hasKey(hay, i) || (norm(i).length>=5 && hay.includes(norm(i).slice(0,6))));
+    indR = ok ? 1 : 0;
+    if(ok) why.push('опыт в отрасли: '+crit.ind.join(', ')); else miss.push('нет опыта в отрасли: '+crit.ind.join(', '));
+  }
+  if(yearsR!==null || indR!==null) add('exp', yearsR!==null && indR!==null ? 0.75*yearsR + 0.25*indR : (yearsR ?? indR));
+
+  // 3. Профессиональные навыки: обязательные вдвое весомее желательных
+  const must = crit.must||[], nice = crit.nice||[];
+  if(must.length || nice.length){
+    const okM = must.filter(has), badM = must.filter(s=>!has(s)), okN = nice.filter(has);
+    add('skills', (2*okM.length + okN.length) / (2*must.length + nice.length));
+    if(okM.length) why.push(okM.length===must.length ? T('allMust') : okM.join(', '));
+    if(okN.length) why.push(okN.join(', '));
+    badM.forEach(s=>miss.push(s));
+    if(badM.length && crit.strict) outFlag = true;
+  }
+
+  // 4. Образование и сертификаты
+  let eduR = null, certR = null;
   if(crit.edu>0){
-    if(c.edu>=crit.edu){ add('edu',1); why.push(T('eduOk')); }
-    else if(c.edu===0) add('edu',0.4);
-    else { add('edu',0); miss.push(T('eduLow')); }
+    if(c.edu>=crit.edu){ eduR = 1; why.push(T('eduOk')); }
+    else if(c.edu===0) eduR = 0.4;
+    else { eduR = 0; miss.push(T('eduLow')); }
   }
-  if(crit.city){
-    // город на процент не влияет — только подсказка в карточке
-    const ok = c.city && norm(c.city)===norm(crit.city);
-    if(ok) why.push(T('cityOk')); else miss.push(crit.city);
+  if(crit.cert && crit.cert.length){
+    const ok = crit.cert.filter(x=>hasKey(hay, x) || hay.includes(norm(x)));
+    certR = ok.length / crit.cert.length;
+    if(ok.length) why.push('сертификаты: '+ok.join(', '));
+    crit.cert.filter(x=>!ok.includes(x)).forEach(x=>miss.push(x));
   }
+  if(eduR!==null || certR!==null) add('edu', eduR!==null && certR!==null ? 0.6*eduR + 0.4*certR : (eduR ?? certR));
+
+  // 5. Дополнительные требования
+  const ex = [];
   if(crit.lang){
     const ok = (c.langs||[]).some(l=>norm(l)===norm(crit.lang));
-    add('lang', ok?1:0);
-    if(ok) why.push(T('langOk')+': '+crit.lang); else miss.push(crit.lang);
+    ex.push(ok?1:0); if(ok) why.push(T('langOk')+': '+crit.lang); else miss.push(crit.lang);
   }
-  if(crit.pos){
-    const p = norm(crit.pos), src = norm((c.position||'')+' '+(posOf(c)||'')+' '+(c.raw||'').slice(0,500));
-    const words = p.split(' ').filter(w=>w.length>3);
-    const hit = words.length ? words.filter(w=>src.includes(w.slice(0,Math.max(4,w.length-2)))).length/words.length : (src.includes(p)?1:0);
-    add('pos', hit);
-    if(hit>=0.5) why.push(T('posOk'));
-    else if(hit<0.15) miss.push(T('posNo')); // явно показываем что должность не совпала
+  if(crit.city){
+    const here = c.city && norm(c.city)===norm(crit.city);
+    const moves = !here && crit.reloc && (c.relocation==='yes' || /(готов[а-яёa-z]*\s+к\s+переезд|переезд\s+возможен|релокац)/i.test(raw));
+    ex.push(here ? 1 : moves ? 0.8 : 0);
+    if(here) why.push(T('cityOk')); else if(moves) why.push('готов к переезду'); else miss.push(crit.city);
   }
+  if(crit.manage){
+    const ok = MANAGE_RX.test(raw);
+    ex.push(ok?1:0); if(ok) why.push('опыт управления командой'); else miss.push('опыт управления командой');
+  }
+  if(crit.format && FORMAT_RX[crit.format]){
+    ex.push(FORMAT_RX[crit.format].test(raw) ? 1 : 0.5);                    // в резюме формат пишут редко — без упоминания половина
+  }
+  (crit.extra||[]).forEach(x=>{ const ok = has(x); ex.push(ok?1:0); if(ok) why.push(x); else miss.push(x); });
+  if(ex.length) add('extra', ex.reduce((a,b)=>a+b,0)/ex.length);
 
   const maxW = rows.reduce((s,r)=>s+r.weight,0);
   const pts  = rows.reduce((s,r)=>s+r.weight*r.ratio,0);
   let score = maxW ? Math.round(pts/maxW*100) : 0;
 
-  /* Дополнительный штраф: если задана должность и совпадение нулевое,
-     а кандидат ответил только по вторичным критериям — cap 45%.
-     Это предотвращает «бухгалтер 40% при поиске маркетолога». */
-  if(crit.pos){
-    const posRow = rows.find(r=>r.key==='pos');
-    if(posRow && posRow.ratio<0.15) score = Math.min(score, 45);
-  }
-  /* Если заданы обязательные навыки и ни один не найден — cap 35% */
-  if(crit.must && crit.must.length){
-    const mustRow = rows.find(r=>r.key==='must');
-    if(mustRow && mustRow.ratio===0) score = Math.min(score, 35);
-  }
+  /* Должность задана, а совпадения по названию нет — не выше 45%
+     (иначе «бухгалтер 40% при поиске маркетолога» за счёт вторичных критериев). */
+  if(titleHit!==null && titleHit<0.15 && !(dutyHit!==null && dutyHit>=0.6)) score = Math.min(score, 45);
+  /* Обязательные навыки заданы, и ни одного нет — не выше 35% */
+  if(must.length && !must.some(has)) score = Math.min(score, 35);
 
   return { score: outFlag?0:score, rows, why, miss, out:outFlag, noCrit: rows.length===0 };
 }
@@ -2162,6 +2253,7 @@ function renderSk(){
     <button aria-label="×" onclick="delSk('nice',${i})">×</button></span>`).join('');
 }
 function clearCrit(){ MUST=[];NICE=[];renderSk(); qFree.value=''; cPos.value='';cExp.value=0;cEdu.value='0';cCity.value='';cLang.value='';
+  cDuties.value=''; cInd.value=''; cCert.value=''; cFormat.value=''; cManage.checked=false; cReloc.checked=true;
   matchOut.innerHTML=''; LAST_SHORT=[]; LAST_CRIT=null; qHint.textContent=T('parseHint'); }
 
 function applyQuery(){
@@ -2174,8 +2266,14 @@ function applyQuery(){
   if(q.lang && [...cLang.options].some(o=>o.value===q.lang)) cLang.value = q.lang;
   q.skills.forEach(s=>{ if(!MUST.includes(s)&&!NICE.includes(s)) NICE.push(s); });
   renderSk();
+  if(q.manage) cManage.checked = true;
+  if(q.reloc) cReloc.checked = true;
+  if(q.format) cFormat.value = q.format;
+  if(q.ind.length && !cInd.value.trim()) cInd.value = q.ind.join(', ');
+  if(q.cert.length && !cCert.value.trim()) cCert.value = [...new Set(q.cert)].join(', ');
   const found = [q.pos&&T('cPos'), q.exp&&T('cExp'), q.edu&&T('cEdu'), q.city&&T('cCity'), q.lang&&T('cLang'),
-    q.skills.length&&(T('cSkills')+': '+q.skills.length)].filter(Boolean);
+    q.skills.length&&(T('cSkills')+': '+q.skills.length), q.ind.length&&'отрасль', q.cert.length&&'сертификаты',
+    q.manage&&'управление командой', q.format&&'формат работы'].filter(Boolean);
   qHint.textContent = found.length ? T('qRead')+' — '+found.join(' · ') : T('qNone');
 }
 
@@ -2187,8 +2285,11 @@ function findCandidates(){
 }
 function currentCrit(){
   const extra = (window.cExtra && cExtra.value ? cExtra.value.split(',').map(x=>x.trim()).filter(Boolean) : []);
+  const list = v => String(v||'').split(/[,;\n]/).map(x=>x.trim()).filter(Boolean);
   return { pos:cPos.value.trim(), exp:+cExp.value||0, edu:+cEdu.value||0,
-    must:MUST.slice(), nice:NICE.concat(extra), extra,
+    must:MUST.slice(), nice:NICE.slice(), extra,
+    duties:(cDuties.value.trim() || qFree.value.trim()), ind:list(cInd.value), cert:list(cCert.value),
+    format:cFormat.value, manage:cManage.checked, reloc:cReloc.checked,
     city:cCity.value, lang:cLang.value, cat:(window.cCat?cCat.value:''),
     fio:(window.cFio?cFio.value.trim():''), gender:(window.cGender?cGender.value:''),
     expTo:(window.cExpTo && cExpTo.value!=='' ? +cExpTo.value : null),
@@ -2507,10 +2608,10 @@ async function saveCard(){
    ============================================================ */
 function renderWeights(){
   wRows.innerHTML = W_ORDER.map(k=>`
-    <div class="row" style="justify-content:space-between;padding:7px 0;border-bottom:1px solid #EFEFEB">
-      <span style="font-size:13px">${esc(T(W_LABEL[k]))}</span>
+    <div class="row" style="justify-content:space-between;flex-wrap:nowrap;padding:7px 0;border-bottom:1px solid #EFEFEB">
+      <span style="font-size:13px;padding-right:12px;flex:1;min-width:0">${esc(T(W_LABEL[k]))}<span class="hint" style="display:block;font-size:11.5px;margin-top:2px">${esc(T(W_HINT[k]))}</span></span>
       <input class="inp" type="number" min="0" max="60" value="${W[k]}" id="w_${k}"
-        oninput="wSumUpd()" style="width:84px;text-align:right;font-family:var(--mono)">
+        oninput="wSumUpd()" style="width:84px;flex:0 0 84px;text-align:right;font-family:var(--mono)">
     </div>`).join('');
   wSumUpd();
 }
@@ -3607,6 +3708,9 @@ function applyCrit(crit){
   cCity.value = crit.city||''; cLang.value = crit.lang||''; if(cCat) cCat.value = crit.cat||'';
   if(cFio) cFio.value = crit.fio||''; if(cGender) cGender.value = crit.gender||'';
   if(cExpTo) cExpTo.value = crit.expTo||''; if(cExtra) cExtra.value = (crit.extra||[]).join(', ');
+  cDuties.value = crit.duties && crit.duties!==qFree.value.trim() ? crit.duties : '';
+  cInd.value = (crit.ind||[]).join(', '); cCert.value = (crit.cert||[]).join(', ');
+  cFormat.value = crit.format||''; cManage.checked = !!crit.manage; cReloc.checked = crit.reloc!==false;
   strict.checked = crit.strict!==false;
   go('match'); runMatch();
 }
