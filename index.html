@@ -102,6 +102,7 @@ nav.primary{display:flex;flex-direction:column;gap:2px}
 .btn-danger{background:var(--danger);color:#fff}
 .fit-on{background:var(--accent-soft);border-color:#CBE3D6;color:var(--accent)}
 .unfit-on{background:var(--danger-soft);border-color:#EACFC8;color:var(--danger)}
+.btn-more{padding:11px 26px;font-size:14.5px;font-weight:600;border-radius:10px;min-width:150px}
 .btn-sm{padding:7px 12px;font-size:12.5px}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
@@ -2375,8 +2376,7 @@ function candCard(s,i){
          ${s.miss.map(w=>`<div class="check-warn">${ICON_WN}${esc(w)}</div>`).join('')}
        </div>
        <div class="cand-actions">
-         ${c.url?`<a class="btn btn-line btn-sm" href="${esc(c.url)}" target="_blank" rel="noopener">${esc(T('openRes'))}</a>`:''}
-         <button class="btn btn-primary btn-sm" onclick="openD(${jid})">${esc(T('more'))}</button>
+         <button class="btn btn-primary btn-more" onclick="openD(${jid})">${esc(T('more'))}</button>
          <button class="btn btn-line btn-sm ${c.verdict==='fit'?'fit-on':''}" onclick="event.stopPropagation();setVerdict(${jid},'fit')">${esc(T('fit'))}</button>
          <button class="btn btn-line btn-sm ${c.verdict==='unfit'?'unfit-on':''}" onclick="event.stopPropagation();setVerdict(${jid},'unfit')">${esc(T('unfit'))}</button>
          <button class="why-toggle" aria-expanded="false" onclick="toggleWhy(${i},this)">${esc(T('why'))}</button>
