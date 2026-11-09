@@ -1694,7 +1694,7 @@ function scoreCandidate(c, crit){
   // 4. Образование и сертификаты
   let eduR = null, certR = null;
   if(crit.edu>0){
-    if(c.edu>=crit.edu){ eduR = 1; why.push(T('eduOk')); }
+    if(c.edu>=crit.edu){ eduR = 1; }                                   // «образование подходит» в списке не показываем
     else if(c.edu===0) eduR = 0.4;
     else { eduR = 0; miss.push(T('eduLow')); }
   }
