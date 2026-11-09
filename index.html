@@ -516,7 +516,7 @@ body.locked #login{display:flex}
       Внутри Битрикс24 файлы сразу сохраняются на Диск в «Резюме / &lt;вакансия&gt; / &lt;кандидат&gt;»; если вакансию определить не удалось — в папку «Без вакансии», оттуда их можно перенести на Диске вручную.</p>
     <div id="placeRows"></div>
     <div class="row" style="margin-top:14px;gap:10px;flex-wrap:wrap">
-      <button class="btn btn-primary" id="placeBtn" onclick="placeAll({auto:true})">📁 Разместить на Диске Битрикс24</button>
+      <button class="btn btn-primary" id="placeBtn" onclick="SRV_OK=null; placeAll({auto:true})">📁 Разместить на Диске Битрикс24</button>
       <span class="hint" id="placeStatus"></span>
     </div>
   </div>
@@ -819,7 +819,7 @@ ru:{appName:'База кандидатов',appOrg:'ООО «Авесто Гру
  noCrit:'Критерии не заданы',noCritSub:'Опишите вакансию в поле выше или заполните поля вручную.',
  backRes:'Назад к шорт-листу',backBase:'Назад ко всем резюме',more:'Подробнее',
  phone:'Телефон',email:'Почта',born:'Год рождения',langs:'Языки',
- source:'Источник',rawText:'Текст резюме, с которым работает поиск',openFile:'Открыть файл на Диске',noText:'текстового слоя нет',
+ source:'Источник',rawText:'Текст резюме, с которым работает поиск',openFile:'Открыть файл в Битрикс24 ↗',noText:'текстового слоя нет',
  local:'локально',mainInfo:'Основная информация',profInfo:'Профессиональная информация',
  strong:'Сильные стороны',weak:'Чего не хватает',reco:'Рекомендация',
  recoYes:'Пригласить на первичное интервью.',recoMaybe:'Посмотреть резюме, есть пробелы по требованиям.',recoNo:'Не проходит по обязательным требованиям.',
@@ -2113,16 +2113,18 @@ async function renderPlace(){
           ${c.folder?'':'<option value="">— выберите —</option>'}
           ${opts.map(f=>`<option value="${esc(f)}" ${f===c.folder?'selected':''}>${esc(f)}${sug[0]&&f===sug[0].folder&&ai.how!=='path'?' ★':''}</option>`).join('')}
           <option value="__new">+ Новая вакансия…</option></select>`;
-      return `<tr><td><a href="#" onclick="openD(${jsArg(c.id)});return false" style="font-weight:600;color:inherit">${esc(cvName(c))}</a></td>
+      const link = c.url ? `<div style="margin-top:4px"><a href="${esc(c.url)}" target="_blank" rel="noopener" style="font-size:12.5px">Открыть файл в Битрикс24 ↗</a></div>` : '';
+      return `<tr><td><a href="#" onclick="openD(${jsArg(c.id)});return false" style="font-weight:600;color:inherit">${esc(dispName(c))}</a>${link}</td>
         <td>${esc(c.position||'—')}</td><td>${sel}</td><td><span class="pill ${tone}">${esc(cl)}</span></td></tr>`;
     }).join('')+'</tbody></table>';
   const left = recs.filter(c=>!String(c.id).startsWith('bx:'));
-  const srv = await srvApi();
-  placeBtn.style.display = srv && left.length ? '' : 'none';
-  placeBtn.textContent = '📁 Разместить на Диске Битрикс24 ('+left.filter(c=>c.folder).length+')';
-  placeStatus.textContent = !left.length ? '✓ Все резюме лежат на Диске' :
-    srv ? 'Файлы лягут в «Резюме / <вакансия> / <кандидат>» и будут видны всем после синхронизации.'
-        : 'Папки сохранены в базе. Положить файлы на Диск можно, когда платформа открыта внутри Битрикс24.';
+  const how = await diskWriter();
+  placeBtn.style.display = left.length ? '' : 'none';
+  placeBtn.textContent = how ? '📁 Разместить на Диске Битрикс24 ('+left.length+')' : '↻ Проверить связь с Диском и разместить';
+  placeStatus.innerHTML = !left.length ? '✓ Все резюме лежат на Диске' :
+    how ? esc('Файлы лягут в «Резюме / <вакансия> / <кандидат>»'+(how==='rest'?' (через Битрикс24)':'')+'.')
+        : '<b style="color:var(--warn)">Не сохранено на Диск:</b> '+esc(SRV_WHY||'нет связи с порталом')+'. '
+          + esc(location.hostname==='isosaid.github.io' ? 'Откройте платформу внутри Битрикс24 (приложение «База кандидатов»).' : 'Положите обновлённый api.php рядом с index.php в папке /baza-kandidatov на портале.');
 }
 async function placeSet(id, val){
   const c = DATA.find(x=>x.id===id); if(!c) return;
@@ -2139,6 +2141,41 @@ const personDirName = c => {
   const n = (c.name || String(c.file||'Кандидат').replace(/\.[a-z0-9]+$/i,'')).replace(/[_\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim().slice(0,80) || 'Кандидат';
   return n+' '+p(t.getDate())+'.'+p(t.getMonth()+1)+'.'+t.getFullYear();
 };
+/* Чем писать на Диск: api.php на портале, иначе — REST Битрикс24 из приложения (BX24).
+   Вебхук для записи не используется. */
+async function diskWriter(){
+  if(await srvApi()) return 'srv';
+  if(BX_APP && window.BX24) return 'rest';
+  return null;
+}
+async function restChildren(id){
+  const out = [];
+  for(let start=0; start<5000; start+=50){
+    const r = await bxCall('disk.folder.getchildren', {id, start});
+    const arr = Array.isArray(r) ? r : [];
+    out.push(...arr); if(arr.length<50) break;
+  }
+  return out;
+}
+const ROOT_DIR_RX = /^(резюме|resume|rezume|cv)(?=$|[\s_\-])/i;
+async function restSub(id, name, create){
+  const kids = (await restChildren(id)).filter(x=>x.TYPE==='folder');
+  const hit = kids.find(x=>String(x.NAME).toLowerCase()===name.toLowerCase());
+  if(hit) return {f:hit, kids};
+  if(!create) return {f:null, kids};
+  return {f: await bxCall('disk.folder.addsubfolder', {id, data:{NAME:name}}), kids};
+}
+const blobB64 = b => new Promise((res,rej)=>{ const fr = new FileReader(); fr.onload=()=>res(String(fr.result).split(',')[1]||''); fr.onerror=rej; fr.readAsDataURL(b); });
+async function restUpload(root, vacancy, person, allowNew, blob, name){
+  // папки вакансий — прямо в выбранной папке или в её подпапке «Резюме»
+  let base = {ID:root}, path = [];
+  let v = await restSub(root, vacancy, false);
+  if(!v.f){ const rd = v.kids.find(x=>ROOT_DIR_RX.test(x.NAME)); if(rd){ base = rd; path.push(rd.NAME); v = await restSub(rd.ID, vacancy, false); } }
+  if(!v.f){ if(!allowNew) throw new Error('папки вакансии «'+vacancy+'» нет'); v = {f: await bxCall('disk.folder.addsubfolder', {id:base.ID, data:{NAME:vacancy}})}; }
+  const d = await restSub(v.f.ID, person, true);
+  const file = await bxCall('disk.folder.uploadfile', {id:d.f.ID, data:{NAME:name}, fileContent:[name, await blobB64(blob)], generateUniqueName:true});
+  return {ID:String(file.ID), NAME:file.NAME, SIZE:String(file.SIZE||blob.size), PATH:[...path, v.f.NAME, d.f.NAME], DETAIL_URL:file.DETAIL_URL||''};
+}
 const NO_VAC = 'Без вакансии';                       // куда класть, если вакансию не удалось определить
 async function placeAll(opts={}){
   let recs = PLACE.map(id=>DATA.find(c=>c.id===id)).filter(c=>c && !String(c.id).startsWith('bx:'));
@@ -2148,12 +2185,17 @@ async function placeAll(opts={}){
   }
   recs = recs.filter(c=>c.folder);
   if(!recs.length) return;
-  if(!SRV_SESSID){ try{ const j = await (await fetch('api.php?a=ping',{credentials:'same-origin',cache:'no-store'})).json(); SRV_SESSID = j.sessid||''; }catch(e){} }
+  const how = await diskWriter();
+  if(!how){ placeStatus.textContent = 'Не сохранено на Диск: '+SRV_WHY+'.'; return; }
+  if(how==='srv' && !SRV_SESSID){ try{ const j = await (await fetch('api.php?a=ping',{credentials:'same-origin',cache:'no-store'})).json(); SRV_SESSID = j.sessid||''; }catch(e){} }
   placeBtn.disabled = true; let ok=0; const errs=[];
   for(let i=0;i<recs.length;i++){
     const c = recs[i]; placeStatus.textContent = '… '+(i+1)+' из '+recs.length+' — '+cvName(c);
     try{
       const blob = await getResumeBlob(c); if(!blob) throw new Error('файла нет в браузере');
+      let item;
+      if(how==='rest') item = await restUpload(bxFolder.value.trim()||DEFAULT_FOLDER, c.folder, personDirName(c), !!c.vacNew || c.folder===NO_VAC, blob, c.file);
+      else {
       const fd = new FormData();
       fd.append('sessid', SRV_SESSID); fd.append('root', bxFolder.value.trim()||DEFAULT_FOLDER);
       fd.append('vacancy', c.folder); fd.append('person', personDirName(c)); if(c.vacNew) fd.append('new','1');
@@ -2161,12 +2203,20 @@ async function placeAll(opts={}){
       const r = await fetch('api.php?a=upload', {method:'POST', body:fd, credentials:'same-origin'});
       const j = await r.json().catch(()=>({ok:false,error:'HTTP '+r.status}));
       if(!j.ok) throw new Error(j.error||('HTTP '+r.status));
+      item = j.item;
+      }
+      const j = {item};
       // запись теперь — файл на Диске: тот же разбор, новый id, без копии в браузере
-      const nc = {...c, id:'bx:'+j.item.ID, source:'bitrix', srv:true, hasFile:false, url:j.item.DETAIL_URL||null,
+      const nc = {...c, id:'bx:'+j.item.ID, source:'bitrix', srv:how==='srv', hasFile:how!=='srv', url:j.item.DETAIL_URL||null,
         folder:c.folder, bxPersonDir:(j.item.PATH||[]).slice(-1)[0]||personDirName(c), vacNew:false};
-      await dbPut([nc]); await dbDel(c.id);
+      await dbDel(c.id);
+      if(how!=='srv') await filePut(nc.id, blob);      // без api.php просмотр — из копии в браузере
+      await dbPut([nc]);
       PLACE = PLACE.map(x=>x===c.id?nc.id:x); ok++;
-      if(opts.auto) log('📁 '+esc(dispName(nc))+' → на Диске: '+esc(['Резюме'].concat(j.item.PATH||[]).filter((x,i,a)=>i||a[1]!=='Резюме').join(' / ')),'ok');
+      if(opts.auto){
+        const where = esc(['Резюме'].concat(j.item.PATH||[]).filter((x,i,a)=>i||a[1]!=='Резюме').join(' / '));
+        log('📁 '+esc(dispName(nc))+' → на Диске: '+(nc.url ? `<a href="${esc(nc.url)}" target="_blank" rel="noopener" style="color:inherit">${where} ↗</a>` : where),'ok');
+      }
     }catch(e){ errs.push(cvName(c)+': '+(e.message||e)); if(opts.auto) log('✕ '+esc(dispName(c))+' — не сохранилось на Диске: '+esc(e.message||e),'e'); }
   }
   DATA = await dbAll(); VAC_IDX = null; refresh(); renderFav(); placeBtn.disabled = false;
@@ -2252,7 +2302,7 @@ async function ingestFiles(input){
   refresh();
   await renderPlace();
   // внутри Битрикс24 — сразу на Диск, в папку с резюме (по умолчанию 58451), по папкам вакансий
-  if(PLACE.length && await srvApi()){
+  if(PLACE.length && await diskWriter()){
     log('… сохраняем на Диск Битрикс24, в папку '+esc(bxFolder.value.trim()||DEFAULT_FOLDER));
     await placeAll({auto:true});
   }
@@ -3287,14 +3337,18 @@ async function bxTestDownload(){
    Без api.php (GitHub, свой компьютер) — как раньше, через REST. */
 let SRV_SESSID = '';
 let SRV_OK = null, SRV_USER = null, SRV_LAST = {id:null, p:null};
+let SRV_WHY = '';                                       // почему сервер портала недоступен — показываем пользователю
 async function srvApi(){
   if(SRV_OK !== null) return SRV_OK;
-  if(!/^https?:$/.test(location.protocol) || location.hostname==='isosaid.github.io'){ SRV_OK = false; return false; }
+  if(!/^https?:$/.test(location.protocol) || location.hostname==='isosaid.github.io'){
+    SRV_OK = false; SRV_WHY = 'платформа открыта не с портала, а с адреса '+(location.hostname||location.protocol); return false;
+  }
   try{
     const r = await fetch('api.php?a=ping', {credentials:'same-origin', cache:'no-store'});
-    const j = await r.json();
+    const j = await r.json().catch(()=>null);
     SRV_OK = !!(j && j.ok); SRV_USER = j && j.user || null; SRV_SESSID = j && j.sessid || '';
-  }catch(e){ SRV_OK = false; }
+    if(!SRV_OK) SRV_WHY = r.status===404 ? 'рядом с index.php нет файла api.php' : 'api.php ответил: '+((j && j.error) || ('HTTP '+r.status));
+  }catch(e){ SRV_OK = false; SRV_WHY = 'api.php не отвечает ('+(e.message||e)+')'; }
   return SRV_OK;
 }
 const srvFileUrl = id => 'api.php?a=file&id='+encodeURIComponent(String(id).replace(/^bx:/,''))+'&root='+encodeURIComponent(bxFolder.value.trim()||DEFAULT_FOLDER||'');
