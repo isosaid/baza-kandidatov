@@ -510,20 +510,21 @@ body.locked #login{display:flex}
     </div>
     <div class="prog" id="prog" style="display:none"><i></i></div>
     <div id="logBox" style="display:none;margin-top:14px"><div class="log" id="log"></div></div>
+  <div class="panel" id="placeCard" style="display:none;margin-top:14px;box-shadow:none;border:1px solid var(--line)">
+    <h3 style="font-size:15px;margin-bottom:4px">Куда положить резюме</h3>
+    <p class="hint" style="margin-bottom:12px">Вакансию подобрала платформа: по должности и опыту кандидата и по резюме, которые уже лежат в папках вакансий.
+      Внутри Битрикс24 файлы сразу сохраняются на Диск в «Резюме / &lt;вакансия&gt; / &lt;кандидат&gt;»; если вакансию определить не удалось — в папку «Без вакансии», оттуда их можно перенести на Диске вручную.</p>
+    <div id="placeRows"></div>
+    <div class="row" style="margin-top:14px;gap:10px;flex-wrap:wrap">
+      <button class="btn btn-primary" id="placeBtn" onclick="placeAll({auto:true})">📁 Разместить на Диске Битрикс24</button>
+      <span class="hint" id="placeStatus"></span>
+    </div>
+  </div>
+
   </div>
 
   <div class="stat-strip" id="loadKpis" style="display:none"></div>
 
-  <div class="panel" id="placeCard" style="display:none;margin-top:18px">
-    <h3 style="font-size:15px;margin-bottom:4px">Куда положить резюме</h3>
-    <p class="hint" style="margin-bottom:12px">Вакансию подобрала платформа: по должности и опыту кандидата и по резюме, которые уже лежат в папках вакансий.
-      Проверьте и при необходимости выберите другую — изменения сохраняются сразу.</p>
-    <div id="placeRows"></div>
-    <div class="row" style="margin-top:14px;gap:10px;flex-wrap:wrap">
-      <button class="btn btn-primary" id="placeBtn" onclick="placeAll()">📁 Разместить на Диске Битрикс24</button>
-      <span class="hint" id="placeStatus"></span>
-    </div>
-  </div>
 
   <div class="panel" id="scanCard" style="display:none;margin-top:18px">
     <h3 style="font-size:15px;margin-bottom:12px" data-i="needOcr">Требуют ручного ввода (скан без текстового слоя)</h3>
@@ -2138,8 +2139,14 @@ const personDirName = c => {
   const n = (c.name || String(c.file||'Кандидат').replace(/\.[a-z0-9]+$/i,'')).replace(/[_\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim().slice(0,80) || 'Кандидат';
   return n+' '+p(t.getDate())+'.'+p(t.getMonth()+1)+'.'+t.getFullYear();
 };
-async function placeAll(){
-  const recs = PLACE.map(id=>DATA.find(c=>c.id===id)).filter(c=>c && !String(c.id).startsWith('bx:') && c.folder);
+const NO_VAC = 'Без вакансии';                       // куда класть, если вакансию не удалось определить
+async function placeAll(opts={}){
+  let recs = PLACE.map(id=>DATA.find(c=>c.id===id)).filter(c=>c && !String(c.id).startsWith('bx:'));
+  if(opts.auto){                                     // сразу после загрузки: без вакансии — в общую папку «Без вакансии»
+    const fix = recs.filter(c=>!c.folder); fix.forEach(c=>{ c.folder = NO_VAC; c.vacNew = true; c.vacAI = {...(c.vacAI||{}), how:'low'}; });
+    if(fix.length) await dbPut(fix);
+  }
+  recs = recs.filter(c=>c.folder);
   if(!recs.length) return;
   if(!SRV_SESSID){ try{ const j = await (await fetch('api.php?a=ping',{credentials:'same-origin',cache:'no-store'})).json(); SRV_SESSID = j.sessid||''; }catch(e){} }
   placeBtn.disabled = true; let ok=0; const errs=[];
@@ -2159,7 +2166,8 @@ async function placeAll(){
         folder:c.folder, bxPersonDir:(j.item.PATH||[]).slice(-1)[0]||personDirName(c), vacNew:false};
       await dbPut([nc]); await dbDel(c.id);
       PLACE = PLACE.map(x=>x===c.id?nc.id:x); ok++;
-    }catch(e){ errs.push(cvName(c)+': '+(e.message||e)); }
+      if(opts.auto) log('📁 '+esc(dispName(nc))+' → на Диске: '+esc(['Резюме'].concat(j.item.PATH||[]).filter((x,i,a)=>i||a[1]!=='Резюме').join(' / ')),'ok');
+    }catch(e){ errs.push(cvName(c)+': '+(e.message||e)); if(opts.auto) log('✕ '+esc(dispName(c))+' — не сохранилось на Диске: '+esc(e.message||e),'e'); }
   }
   DATA = await dbAll(); VAC_IDX = null; refresh(); renderFav(); placeBtn.disabled = false;
   await renderPlace();
@@ -2242,7 +2250,12 @@ async function ingestFiles(input){
   loadKpis.innerHTML = kp
     .map(([n,l])=>`<div class="stat"><span class="num">${n}</span><span class="label">${esc(l)}</span></div>`).join('');
   refresh();
-  renderPlace();
+  await renderPlace();
+  // внутри Битрикс24 — сразу на Диск, в папку с резюме (по умолчанию 58451), по папкам вакансий
+  if(PLACE.length && await srvApi()){
+    log('… сохраняем на Диск Битрикс24, в папку '+esc(bxFolder.value.trim()||DEFAULT_FOLDER));
+    await placeAll({auto:true});
+  }
   gdQueueSave();   // новые резюме сразу уходят в общую базу
 }
 /* ===== Распознавание сканов (OCR) =====
