@@ -513,6 +513,17 @@ body.locked #login{display:flex}
 
   <div class="stat-strip" id="loadKpis" style="display:none"></div>
 
+  <div class="panel" id="placeCard" style="display:none;margin-top:18px">
+    <h3 style="font-size:15px;margin-bottom:4px">Куда положить резюме</h3>
+    <p class="hint" style="margin-bottom:12px">Вакансию подобрала платформа: по должности и опыту кандидата и по резюме, которые уже лежат в папках вакансий.
+      Проверьте и при необходимости выберите другую — изменения сохраняются сразу.</p>
+    <div id="placeRows"></div>
+    <div class="row" style="margin-top:14px;gap:10px;flex-wrap:wrap">
+      <button class="btn btn-primary" id="placeBtn" onclick="placeAll()">📁 Разместить на Диске Битрикс24</button>
+      <span class="hint" id="placeStatus"></span>
+    </div>
+  </div>
+
   <div class="panel" id="scanCard" style="display:none;margin-top:18px">
     <h3 style="font-size:15px;margin-bottom:12px" data-i="needOcr">Требуют ручного ввода (скан без текстового слоя)</h3>
     <div class="note w">У этих файлов нет текстового слоя — это сканы, фото или резюме, где буквы сохранены картинкой. Платформа распознаёт их сама (первые 2 страницы, русский, таджикский, английский) — после синхронизации или по кнопке ниже. Если и после этого данных нет — попросите кандидата прислать резюме файлом Word или PDF с текстом.</div>
@@ -613,6 +624,13 @@ body.locked #login{display:flex}
 
 
   
+
+  <div class="panel" style="margin-bottom:18px">
+    <h3 style="font-size:15px;margin-bottom:6px">Подбор папки вакансии при загрузке — проверка точности</h3>
+    <p class="hint" style="margin-bottom:12px">Берём резюме, которые уже лежат в папках вакансий, «прячем» папку и смотрим, угадает ли её платформа.
+      Так видно, насколько можно доверять подсказке на вашей базе.</p>
+    <div class="row" style="gap:10px;flex-wrap:wrap"><button class="btn btn-line btn-sm" onclick="vacEval()">Проверить на базе</button><span class="hint" id="vacEvalOut"></span></div>
+  </div>
 
   <div class="grid g2" style="align-items:start">
     <div class="panel">
@@ -1783,6 +1801,13 @@ function dbPut(items){
     tx.oncomplete=()=>res(); tx.onerror=e=>rej(e);
   });
 }
+function dbDel(id){
+  return new Promise((res,rej)=>{
+    const tx = DB.transaction(['c','f'],'readwrite');
+    tx.objectStore('c').delete(id); tx.objectStore('f').delete(id);
+    tx.oncomplete=()=>res(); tx.onerror=e=>rej(e);
+  });
+}
 function dbAll(){
   return new Promise((res,rej)=>{
     const out=[], tx=DB.transaction('c','readonly');
@@ -1980,6 +2005,165 @@ async function mergeResumeFile(rec, f, folder){
     added: rec.added, applied: rec.applied||full.applied, bxPersonDir: rec.bxPersonDir||null, meta:false, gdFileId:null, hasFile:true});
   return rec;
 }
+/* ===== Подбор папки вакансии для нового резюме =====
+   Модель строится на своей базе, ничего наружу не уходит:
+   - название папки вакансии сравнивается с должностью и началом резюме (50%);
+   - текст резюме сравнивается с «типичным резюме» каждой папки — TF-IDF и косинус (40%);
+   - категория должности совпадает с основной категорией папки (10%). */
+const VAC_STOP = new Set('работа работы работе опыт опыта образование образования навыки навыков обязанности обязанностей компании компания должность резюме телефон город область республика таджикистан душанбе годы года время период настоящее время который которые также другие более менее очень хорошо знание знания умение владение уровень язык языки русский английский таджикский личные качества ответственность коммуникабельность пунктуальность'.split(' '));
+function vacTokens(text){
+  const out = new Map();
+  norm(String(text||'').slice(0,5000)).split(/[^a-zа-я0-9]+/).forEach(w=>{
+    if(w.length<4 || /^\d+$/.test(w) || VAC_STOP.has(w)) return;
+    const k = w.slice(0,6); out.set(k, (out.get(k)||0)+1);
+  });
+  return out;
+}
+const vacStems = t => norm(t).split(/[^a-zа-я0-9]+/).filter(w=>w.length>=3 && !/^(и|по|в|на|для|отдел|отдела|служба|службы)$/.test(w)).map(w=>w.slice(0,Math.max(4,Math.min(6,w.length-1))));
+let VAC_IDX = null;
+function vacIndex(){
+  if(VAC_IDX && VAC_IDX.n===DATA.length) return VAC_IDX;
+  const by = new Map();
+  DATA.forEach(c=>{
+    if(!c.folder || PERSON_DIR.test(c.folder)) return;
+    if(!by.has(c.folder)) by.set(c.folder, {name:c.folder, count:0, docs:[], cats:{}});
+    const f = by.get(c.folder); f.count++;
+    if(c.category) f.cats[c.category] = (f.cats[c.category]||0)+1;
+    if(!c.meta && !c.scan && (c.raw||'').length>150 && f.docs.length<80) f.docs.push(c);
+  });
+  const df = new Map(); let N = 0;
+  by.forEach(f=>f.docs.forEach(c=>{ c._vt = vacTokens((c.position||'')+' '+(c.position||'')+' '+c.raw); N++; c._vt.forEach((_,k)=>df.set(k,(df.get(k)||0)+1)); }));
+  const idf = k => Math.log((N+1)/((df.get(k)||0)+1)) + 1;
+  const vec = tf => { const v = new Map(); let nn = 0; tf.forEach((n,k)=>{ const x = (1+Math.log(n))*idf(k); v.set(k,x); nn += x*x; }); return {v, nn:Math.sqrt(nn)||1}; };
+  by.forEach(f=>{
+    f.sum = new Map();
+    f.docs.forEach(c=>{ const {v,nn} = vec(c._vt); c._vv = {v,nn}; v.forEach((x,k)=>f.sum.set(k,(f.sum.get(k)||0)+x/nn)); });
+    f.stems = vacStems(f.name);
+    f.cat = Object.entries(f.cats).sort((a,b)=>b[1]-a[1])[0]?.[0] || null;
+  });
+  VAC_IDX = {n:DATA.length, folders:[...by.values()], vec};
+  return VAC_IDX;
+}
+function suggestVacancy(c, opts={}){
+  const idx = vacIndex(); if(!idx.folders.length) return [];
+  const {v, nn} = idx.vec(vacTokens((c.position||'')+' '+(c.position||'')+' '+(c.raw||'')));
+  const posS = new Set(vacStems(c.position||'')), topS = new Set(vacStems((c.raw||'').slice(0,600)));
+  const res = idx.folders.map(f=>{
+    // «типичное резюме» папки; при проверке точности само резюме из папки исключаем
+    let sum = f.sum, cnt = f.docs.length;
+    if(opts.exclude && f.docs.includes(opts.exclude) && opts.exclude._vv){
+      sum = new Map(sum); cnt--; const ex = opts.exclude._vv; ex.v.forEach((x,k)=>sum.set(k,(sum.get(k)||0)-x/ex.nn));
+    }
+    let dot = 0, sn = 0; sum.forEach(x=>{ sn += x*x; });
+    v.forEach((x,k)=>{ const y = sum.get(k); if(y) dot += x*y; });
+    const cos = cnt>0 && sn>0 ? dot/(nn*Math.sqrt(sn)) : 0;
+    const hit = f.stems.length ? f.stems.filter(st=>[...posS].some(w=>w.startsWith(st)||st.startsWith(w))).length/f.stems.length : 0;
+    const hitTop = f.stems.length ? f.stems.filter(st=>[...topS].some(w=>w.startsWith(st)||st.startsWith(w))).length/f.stems.length : 0;
+    const title = Math.max(hit, hitTop*0.6);
+    return {folder:f.name, count:f.count, cos, title, cat: (c.category && f.cat===c.category) ? 1 : 0};
+  });
+  const maxCos = Math.max(...res.map(r=>r.cos), 1e-9);
+  res.forEach(r=>{ r.score = 0.5*r.title + 0.4*(r.cos/maxCos)*Math.min(1, maxCos/0.12) + 0.1*r.cat; });
+  res.sort((a,b)=>b.score-a.score || b.count-a.count);
+  const top = res[0], gap = top.score - (res[1] ? res[1].score : 0);
+  top.conf = top.score>=0.6 && gap>=0.08 ? 'high' : top.score>=0.35 ? 'mid' : 'low';
+  return res.slice(0, opts.n||3);
+}
+const VAC_CONF = {high:['высокая','ok'], mid:['средняя','warn'], low:['низкая — проверьте','bad'], path:['по папке загрузки','ok'], manual:['выбрано вручную','ok'], disk:['уже на Диске','ok']};
+/* проверка точности на своей базе: прячем папку и смотрим, угадали ли */
+async function vacEval(){
+  const out = document.getElementById('vacEvalOut'); out.textContent = '… считаем';
+  await new Promise(r=>setTimeout(r,30));
+  VAC_IDX = null; const idx = vacIndex();
+  const pool = idx.folders.flatMap(f=>f.docs.filter(()=>f.docs.length>=2));
+  if(pool.length<10 || idx.folders.length<2){ out.textContent = 'Мало данных: нужны хотя бы 2 папки вакансий и 10 резюме с текстом.'; return; }
+  const sample = pool.length>400 ? pool.filter((_,i)=>i % Math.ceil(pool.length/400)===0) : pool;
+  let t1=0, t3=0, hiN=0, hiOk=0;
+  sample.forEach(c=>{
+    const r = suggestVacancy(c, {exclude:c, n:3});
+    if(r[0] && r[0].folder===c.folder) t1++;
+    if(r.some(x=>x.folder===c.folder)) t3++;
+    if(r[0] && r[0].conf==='high'){ hiN++; if(r[0].folder===c.folder) hiOk++; }
+  });
+  const pct = (a,b)=>b?Math.round(a/b*100)+'%':'—';
+  out.innerHTML = `Проверено резюме: <b>${sample.length}</b> по ${idx.folders.length} вакансиям · угадана папка с первого варианта: <b>${pct(t1,sample.length)}</b> · среди трёх вариантов: <b>${pct(t3,sample.length)}</b> · при «высокой» уверенности: <b>${pct(hiOk,hiN)}</b> (${hiN} резюме)`;
+}
+
+/* ---- панель «Куда положить» ---- */
+let PLACE = [];                                     // id записей из последней загрузки
+function vacFolders(){ const m = new Map(); DATA.forEach(c=>{ if(c.folder && !PERSON_DIR.test(c.folder)) m.set(c.folder,(m.get(c.folder)||0)+1); }); return [...m.entries()].sort((a,b)=>b[1]-a[1]).map(x=>x[0]); }
+async function renderPlace(){
+  const card = document.getElementById('placeCard'); if(!card) return;
+  const recs = PLACE.map(id=>DATA.find(c=>c.id===id)).filter(Boolean);
+  if(!recs.length){ card.style.display='none'; return; }
+  card.style.display='block';
+  const all = vacFolders();
+  placeRows.innerHTML = `<table class="tbl" style="width:100%"><thead><tr><th>Кандидат</th><th>Должность в резюме</th><th style="width:34%">Папка вакансии</th><th>Уверенность</th></tr></thead><tbody>`+
+    recs.map(c=>{
+      const ai = c.vacAI||{}, sug = ai.top||[];
+      const opts = [...new Set([...sug.map(x=>x.folder), c.folder, ...all].filter(Boolean))];
+      const conf = String(c.id).startsWith('bx:') ? 'disk' : (ai.how||'low');
+      const [cl, tone] = VAC_CONF[conf] || VAC_CONF.low;
+      const sel = String(c.id).startsWith('bx:') ? `<b>${esc(c.folder||'')}</b>` :
+        `<select class="inp" style="padding:6px 8px" onchange="placeSet(${jsArg(c.id)}, this.value)">
+          ${c.folder?'':'<option value="">— выберите —</option>'}
+          ${opts.map(f=>`<option value="${esc(f)}" ${f===c.folder?'selected':''}>${esc(f)}${sug[0]&&f===sug[0].folder&&ai.how!=='path'?' ★':''}</option>`).join('')}
+          <option value="__new">+ Новая вакансия…</option></select>`;
+      return `<tr><td><a href="#" onclick="openD(${jsArg(c.id)});return false" style="font-weight:600;color:inherit">${esc(cvName(c))}</a></td>
+        <td>${esc(c.position||'—')}</td><td>${sel}</td><td><span class="pill ${tone}">${esc(cl)}</span></td></tr>`;
+    }).join('')+'</tbody></table>';
+  const left = recs.filter(c=>!String(c.id).startsWith('bx:'));
+  const srv = await srvApi();
+  placeBtn.style.display = srv && left.length ? '' : 'none';
+  placeBtn.textContent = '📁 Разместить на Диске Битрикс24 ('+left.filter(c=>c.folder).length+')';
+  placeStatus.textContent = !left.length ? '✓ Все резюме лежат на Диске' :
+    srv ? 'Файлы лягут в «Резюме / <вакансия> / <кандидат>» и будут видны всем после синхронизации.'
+        : 'Папки сохранены в базе. Положить файлы на Диск можно, когда платформа открыта внутри Битрикс24.';
+}
+async function placeSet(id, val){
+  const c = DATA.find(x=>x.id===id); if(!c) return;
+  if(val==='__new'){
+    const n = (prompt('Название новой папки вакансии (как должность):', c.position||'')||'').trim().replace(/[\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ');
+    if(!n){ renderPlace(); return; }
+    val = n; c.vacNew = !vacFolders().includes(n);
+  } else c.vacNew = false;
+  c.folder = val || null; c.vacAI = {...(c.vacAI||{}), how:'manual'};
+  await dbPut([c]); DATA = await dbAll(); VAC_IDX = null; refresh(); renderPlace();
+}
+const personDirName = c => {
+  const d = c.applied || c.added || Date.now(), t = new Date(d), p = x=>String(x).padStart(2,'0');
+  const n = (c.name || String(c.file||'Кандидат').replace(/\.[a-z0-9]+$/i,'')).replace(/[_\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim().slice(0,80) || 'Кандидат';
+  return n+' '+p(t.getDate())+'.'+p(t.getMonth()+1)+'.'+t.getFullYear();
+};
+async function placeAll(){
+  const recs = PLACE.map(id=>DATA.find(c=>c.id===id)).filter(c=>c && !String(c.id).startsWith('bx:') && c.folder);
+  if(!recs.length) return;
+  if(!SRV_SESSID){ try{ const j = await (await fetch('api.php?a=ping',{credentials:'same-origin',cache:'no-store'})).json(); SRV_SESSID = j.sessid||''; }catch(e){} }
+  placeBtn.disabled = true; let ok=0; const errs=[];
+  for(let i=0;i<recs.length;i++){
+    const c = recs[i]; placeStatus.textContent = '… '+(i+1)+' из '+recs.length+' — '+cvName(c);
+    try{
+      const blob = await getResumeBlob(c); if(!blob) throw new Error('файла нет в браузере');
+      const fd = new FormData();
+      fd.append('sessid', SRV_SESSID); fd.append('root', bxFolder.value.trim()||DEFAULT_FOLDER);
+      fd.append('vacancy', c.folder); fd.append('person', personDirName(c)); if(c.vacNew) fd.append('new','1');
+      fd.append('file', blob, c.file);
+      const r = await fetch('api.php?a=upload', {method:'POST', body:fd, credentials:'same-origin'});
+      const j = await r.json().catch(()=>({ok:false,error:'HTTP '+r.status}));
+      if(!j.ok) throw new Error(j.error||('HTTP '+r.status));
+      // запись теперь — файл на Диске: тот же разбор, новый id, без копии в браузере
+      const nc = {...c, id:'bx:'+j.item.ID, source:'bitrix', srv:true, hasFile:false, url:j.item.DETAIL_URL||null,
+        folder:c.folder, bxPersonDir:(j.item.PATH||[]).slice(-1)[0]||personDirName(c), vacNew:false};
+      await dbPut([nc]); await dbDel(c.id);
+      PLACE = PLACE.map(x=>x===c.id?nc.id:x); ok++;
+    }catch(e){ errs.push(cvName(c)+': '+(e.message||e)); }
+  }
+  DATA = await dbAll(); VAC_IDX = null; refresh(); renderFav(); placeBtn.disabled = false;
+  await renderPlace();
+  const msg = '✓ Размещено на Диске: '+ok+(errs.length?' · не удалось: '+errs.length:'');
+  placeStatus.textContent = msg + (errs.length?' — '+errs.join('; '):''); toast(msg);
+}
+
 async function ingestFiles(input){
   logBox.style.display='block'; document.getElementById('log').innerHTML='';
   const files = await expandZips(input);
@@ -1988,6 +2172,7 @@ async function ingestFiles(input){
   setProg(0);
   const existing = new Set(DATA.map(c=>c.id));
   const fresh=[]; let dupes=0, enriched=0, savedFresh=0, scanCnt=0; const fixed=[];
+  PLACE = []; VAC_IDX = null; const known = new Set(vacFolders());
   for(let i=0;i<list.length;i++){
     const f = list[i];
     const relPath = f.webkitRelativePath || '';
@@ -2021,11 +2206,21 @@ async function ingestFiles(input){
       await filePut(id, new Blob([buf], {type: f.type||mimeByName(f.name)}));
       const c = parseResume(txt,{id,file:f.name,folder,size:f.size,source:'local',mtime:f.lastModified||null,fileMime:f.type||mimeByName(f.name)});
       c.hasFile = true;
+      // папка вакансии: из пути загрузки, если это известная вакансия; иначе — подсказка платформы
+      const top = suggestVacancy(c);
+      if(folder && known.has(folder)) c.vacAI = {how:'path', top};
+      else if(top.length){
+        c.vacAI = {how: top[0].conf, top: top.map(x=>({folder:x.folder, score:+x.score.toFixed(2)}))};
+        if(!folder && top[0].conf!=='low') c.folder = top[0].folder;
+        else if(folder){ c.vacAI.how = 'manual'; c.vacNew = true; }       // новая папка из пути загрузки — оставляем её
+      }
+      PLACE.push(id);
       fresh.push(c); existing.add(id); if(c.scan) scanCnt++;
       if(fresh.length>=100){ await dbPut(fresh); savedFresh += fresh.length; fresh.length = 0; }
       log((c.scan?'⚠ ':'✓ ')+esc(f.name)+' — '+(c.scan?esc(T('noLayer'))+' · ':'')
         +`<a href="#" style="color:inherit;font-weight:600" onclick="openD(${jsArg(id)});return false">${esc(c.name||T('noName'))}</a>`
         +(c.position?' · '+esc(c.position):'')+(c.category?' · '+esc(c.category):'')
+        +(c.folder?' · 📁 '+esc(c.folder):'')
         +(!c.scan&&c.skills.length?' · '+T('skCnt')+': '+c.skills.length:''), c.scan?'w':'ok');
     }catch(e){ log('✕ '+esc(f.name)+' — '+esc(e.message||'ошибка чтения'),'e'); }
     setProg((i+1)/list.length);
@@ -2044,6 +2239,7 @@ async function ingestFiles(input){
   loadKpis.innerHTML = kp
     .map(([n,l])=>`<div class="stat"><span class="num">${n}</span><span class="label">${esc(l)}</span></div>`).join('');
   refresh();
+  renderPlace();
   gdQueueSave();   // новые резюме сразу уходят в общую базу
 }
 /* ===== Распознавание сканов (OCR) =====
@@ -3073,6 +3269,7 @@ async function bxTestDownload(){
 /* Если платформа лежит на сервере портала рядом с api.php (bitrix/api.php в репозитории),
    Диск читается прямо на сервере: список — одним запросом, файл — по ссылке api.php?a=file.
    Без api.php (GitHub, свой компьютер) — как раньше, через REST. */
+let SRV_SESSID = '';
 let SRV_OK = null, SRV_USER = null, SRV_LAST = {id:null, p:null};
 async function srvApi(){
   if(SRV_OK !== null) return SRV_OK;
@@ -3080,7 +3277,7 @@ async function srvApi(){
   try{
     const r = await fetch('api.php?a=ping', {credentials:'same-origin', cache:'no-store'});
     const j = await r.json();
-    SRV_OK = !!(j && j.ok); SRV_USER = j && j.user || null;
+    SRV_OK = !!(j && j.ok); SRV_USER = j && j.user || null; SRV_SESSID = j && j.sessid || '';
   }catch(e){ SRV_OK = false; }
   return SRV_OK;
 }

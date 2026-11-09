@@ -7,6 +7,7 @@
      api.php?a=ping                — проверка: вход в портал есть?
      api.php?a=list&root=58451     — все резюме папки одним ответом
      api.php?a=file&id=12345       — сам файл резюме (для разбора и просмотра)
+     api.php?a=upload  (POST)      — положить резюме в Резюме/<Вакансия>/<Кандидат>/
 
    Доступ: только пользователь, вошедший в портал; только файлы внутри
    выбранной папки; только те, что этому пользователю разрешено читать на Диске.
@@ -25,6 +26,8 @@ use Bitrix\Disk\Security\DiskSecurityContext;
 
 const RESUME_EXT = '/\.(pdf|docx?|rtf|txt|odt)$/iu';
 const MAX_DEPTH  = 12;
+const MAX_UPLOAD = 20 * 1024 * 1024;                 // 20 МБ на файл резюме
+const ROOT_DIR_RX = '/^(резюме|resume|rezume|cv)(\b|$|[ _\-])/iu';
 
 function out($data, $code = 200){
     while (ob_get_level()) ob_end_clean();
@@ -44,7 +47,8 @@ $sc  = new DiskSecurityContext($uid);          // права текущего п
 $a   = (string)($_GET['a'] ?? 'ping');
 
 if ($a === 'ping') {
-    out(['ok' => true, 'user' => ['id' => $uid, 'name' => trim($USER->GetFirstName() . ' ' . $USER->GetLastName())]]);
+    out(['ok' => true, 'user' => ['id' => $uid, 'name' => trim($USER->GetFirstName() . ' ' . $USER->GetLastName())],
+         'sessid' => bitrix_sessid()]);                // для записи (upload) — защита от подделки запроса
 }
 
 if ($a === 'list') {
@@ -110,6 +114,76 @@ if ($a === 'file') {
     header('X-Content-Type-Options: nosniff');
     readfile($src);
     exit;
+}
+
+if ($a === 'upload') {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') out(['ok' => false, 'error' => 'Нужен POST'], 405);
+    if (!check_bitrix_sessid())                 out(['ok' => false, 'error' => 'Сессия устарела — обновите страницу'], 403);
+
+    $clean = function ($s, $max = 100) {
+        $s = preg_replace('~[\\\\/:*?"<>|\x00-\x1F]+~u', ' ', (string)$s);
+        $s = trim(preg_replace('/\s+/u', ' ', $s), " .\t");
+        return mb_substr($s, 0, $max);
+    };
+    $rootId  = (int)($_POST['root'] ?? 0);
+    $vacName = $clean($_POST['vacancy'] ?? '');
+    $person  = $clean($_POST['person'] ?? '');
+    $allowNew = !empty($_POST['new']);                 // новую папку вакансии создаём только по явному выбору
+    $f = $_FILES['file'] ?? null;
+
+    if ($vacName === '' || $person === '')                  out(['ok' => false, 'error' => 'Не указаны вакансия или кандидат'], 400);
+    if (!$f || ($f['error'] ?? 1) !== UPLOAD_ERR_OK)        out(['ok' => false, 'error' => 'Файл не получен'], 400);
+    if ($f['size'] > MAX_UPLOAD)                            out(['ok' => false, 'error' => 'Файл больше 20 МБ'], 413);
+    $fname = $clean($f['name'] ?? '', 150);
+    if (!preg_match(RESUME_EXT, $fname))                    out(['ok' => false, 'error' => 'Это не файл резюме'], 403);
+
+    $root = $rootId ? Folder::loadById($rootId) : null;
+    if (!$root || !$root->canRead($sc))                     out(['ok' => false, 'error' => "Папка $rootId не найдена или нет доступа"], 404);
+
+    $sub = function ($folder, $name) use ($sc) {          // дочерняя папка по имени (без учёта регистра)
+        foreach ($folder->getChildren($sc) as $obj) {
+            if ($obj instanceof Folder && mb_strtolower($obj->getName()) === mb_strtolower($name)) return $obj;
+        }
+        return null;
+    };
+    // папки вакансий лежат прямо в выбранной папке или в её подпапке «Резюме»
+    $base = $root;
+    if (!$sub($root, $vacName)) {
+        foreach ($root->getChildren($sc) as $obj) {
+            if ($obj instanceof Folder && preg_match(ROOT_DIR_RX, $obj->getName())) { $base = $obj; break; }
+        }
+    }
+    $vac = $sub($base, $vacName);
+    if (!$vac) {
+        if (!$allowNew)                                     out(['ok' => false, 'error' => "Папки вакансии «{$vacName}» нет"], 404);
+        if (!$base->canAdd($sc))                            out(['ok' => false, 'error' => 'Нет права создавать папки'], 403);
+        $vac = $base->addSubFolder(['NAME' => $vacName, 'CREATED_BY' => $uid]);
+        if (!$vac)                                          out(['ok' => false, 'error' => 'Папка вакансии не создалась'], 500);
+    }
+    $dir = $sub($vac, $person);
+    if (!$dir) {
+        if (!$vac->canAdd($sc))                             out(['ok' => false, 'error' => 'Нет права записи в папку вакансии'], 403);
+        $dir = $vac->addSubFolder(['NAME' => $person, 'CREATED_BY' => $uid], [], true);
+        if (!$dir)                                          out(['ok' => false, 'error' => 'Папка кандидата не создалась'], 500);
+    }
+    if (!$dir->canAdd($sc))                                 out(['ok' => false, 'error' => 'Нет права записи'], 403);
+
+    $file = $dir->uploadFile(
+        ['name' => $fname, 'type' => $f['type'] ?: 'application/octet-stream', 'tmp_name' => $f['tmp_name'], 'size' => $f['size'], 'error' => 0],
+        ['NAME' => $fname, 'CREATED_BY' => $uid], [], true);   // такое имя уже есть — Диск добавит номер
+    if (!$file) {
+        $err = $dir->getErrors(); $msg = $err ? $err[0]->getMessage() : 'Файл не сохранился';
+        out(['ok' => false, 'error' => $msg], 500);
+    }
+    $url = '';
+    try { $url = \Bitrix\Disk\Driver::getInstance()->getUrlManager()->getPathFileDetail($file); } catch (\Throwable $e) {}
+    $path = [];
+    for ($p = $dir, $i = 0; $p && (int)$p->getId() !== $rootId && $i < MAX_DEPTH; $i++) { array_unshift($path, $p->getName()); $p = $p->getParent(); }
+    out(['ok' => true, 'item' => [
+        'ID' => (string)$file->getId(), 'NAME' => $file->getName(), 'SIZE' => (string)$file->getSize(),
+        'CREATE_TIME' => $file->getCreateTime() ? $file->getCreateTime()->format('c') : null,
+        'PATH' => $path, 'DETAIL_URL' => $url,
+    ]]);
 }
 
 out(['ok' => false, 'error' => 'Неизвестное действие'], 400);
