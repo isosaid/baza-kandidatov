@@ -1400,6 +1400,8 @@ function cvName(c, withExt=true){
   return ['CV', clean(c.name), date, clean(c.org)].filter(Boolean).join('_') + (withExt ? ext : '');
 }
 /* Имя из названия файла, если подпапки кандидата нет: «Резюме_Холова_К..pdf» → «Холова К» */
+/* Имя для показа: из резюме, иначе из названия файла (записи, разобранные старой версией) */
+const dispName = c => (c && (c.name || nameFromFile(c.file) || c.file)) || '—';
 function nameFromFile(fn){
   const tpl = parseFileTemplate(fn); if(tpl) return tpl.name;
   const STOP = new Set(['резюме','resume','cv','rezume','curriculum','vitae','от','new','копия','copy','doc','inbound',
@@ -2447,7 +2449,7 @@ function renderBase(){
   tblBase.innerHTML = '<thead><tr>'+H.map(([k,l])=>`<th onclick="sortBy('${k}')">${esc(l)}${SORT.k===k?(SORT.d>0?' ▲':' ▼'):''}</th>`).join('')+'</tr></thead><tbody>'+
    page.map(c=>{ const st=STATUS[c.status||'new'];
    return `<tr class="clk" onclick="openD(${jsArg(c.id)})">
-     <td><div class="nm">${esc(c.name||'—')}</div><div class="mut">${c.meta?'<span style="color:var(--warn)">без разбора · </span>':''}${esc(c.phone||c.email||c.file)}</div></td>
+     <td><div class="nm">${esc(dispName(c))}</div><div class="mut">${c.meta?'<span style="color:var(--warn)">без разбора · </span>':''}${esc(c.phone||c.email||c.file)}</div></td>
      <td>${c.category?`<span class="pill">${esc(c.category)}</span>`:'<span class="mut">—</span>'}</td>
      <td>${esc(posOf(c)||'—')}${c.org?`<div class="mut">${esc(c.org)}</div>`:''}</td>
      <td>${c.exp!=null?c.exp+' '+esc(T('yrs')):'<span class="mut">—</span>'}</td>
@@ -2615,10 +2617,10 @@ function candCard(s,i){
   const jid = jsArg(c.id);
   return `<div class="cand-card">
    <div class="cand-top">
-     <div class="dial" data-pct="${s.score}" data-color="${cls}"></div>
+     <div class="dial" data-pct="${s.score}" data-color="${cls}" onclick="openD(${jid})" style="cursor:pointer" title="Открыть карточку кандидата"></div>
      <div class="cand-main">
-       <a href="#" class="cand-name" onclick="openD(${jid});return false" title="Открыть карточку кандидата">${esc(c.name||cvName(c))}</a>
-       <div class="cand-role">${esc(role)}</div>
+       <a href="#" class="cand-name" onclick="openD(${jid});return false" title="Открыть карточку кандидата">${esc(dispName(c))}</a>
+       <div class="cand-role" onclick="openD(${jid})" style="cursor:pointer">${esc(role)}</div>
        <div class="cand-tags">${(c.skills||[]).slice(0,6).map(k=>`<span class="pill">${esc(k)}</span>`).join('')}</div>
        <div class="cand-checks">
          ${s.why.map(w=>`<div class="check-ok">${ICON_OK}${esc(w)}</div>`).join('')}
@@ -2776,7 +2778,7 @@ function renderDetail(){
   <button class="btn btn-ghost btn-sm" style="margin-bottom:14px" onclick="go('${BACK_TO}')">← ${esc(BACK_TO==='match'?T('backRes'):BACK_TO==='fav'?(LANG==='tj'?'Ба интихобшудаҳо':'Назад к избранному'):T('backBase'))}</button>
   <div class="detail-header">
     <div>
-      <h2>${esc(c.name||cvName(c))}</h2>
+      <h2>${esc(dispName(c))}</h2>
       <div class="sub">${esc([posOf(c), c.org, c.city, c.exp!=null?c.exp+' '+T('yrs'):null].filter(Boolean).join(' · '))}</div>
       <div class="file-badges">
         <span class="file-badge" title="Исходный файл: ${esc(c.file||'')}">${esc(cvName(c))}</span>
@@ -4186,16 +4188,16 @@ async function setVerdict(id, v){
       const existing = FAV.find(f=>f.name===prof);
       if(existing){
         if(!existing.items.find(i=>i.id===c.id)){
-          existing.items.push({id:c.id, name:c.name||c.file, score:scoreVal});
+          existing.items.push({id:c.id, name:dispName(c), score:scoreVal});
           existing.date=Date.now();
           LSS('avb_fav',FAV); renderFav();
         }
       } else {
         FAV.unshift({id:'f'+Date.now(), name:prof, date:Date.now(), crit:null,
-          items:[{id:c.id, name:c.name||c.file, score:scoreVal}]});
+          items:[{id:c.id, name:dispName(c), score:scoreVal}]});
         LSS('avb_fav',FAV); renderFav();
       }
-      toast('✓ ' + (c.name||c.file) + ' → 📁 ' + prof);
+      toast('✓ ' + dispName(c) + ' → 📁 ' + prof);
     } else {
       toast(T('verdictFit'));
     }
