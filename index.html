@@ -200,7 +200,8 @@ textarea.inp{resize:vertical;min-height:96px;font-size:14.5px;padding:13px 15px;
 .cand-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-m);padding:22px;margin-bottom:14px}
 .cand-top{display:flex;gap:18px}
 .cand-main{flex:1;min-width:0}
-.cand-name{font-size:16.5px;font-weight:600;font-family:var(--serif)}
+.cand-name{display:block;font-size:16.5px;font-weight:600;font-family:var(--serif);color:var(--ink);text-decoration:none;cursor:pointer;width:fit-content}
+.cand-name:hover{color:var(--accent);text-decoration:underline;text-underline-offset:3px}
 .cand-role{color:var(--muted);font-size:13px;margin-top:2px}
 .cand-tags{margin-top:9px}
 .cand-ai{margin-top:12px;font-size:13.5px;color:#38455F;background:#F7F8F5;border-left:3px solid var(--accent);padding:10px 12px;border-radius:0 var(--radius-s) var(--radius-s) 0}
@@ -2616,7 +2617,7 @@ function candCard(s,i){
    <div class="cand-top">
      <div class="dial" data-pct="${s.score}" data-color="${cls}"></div>
      <div class="cand-main">
-       <div class="cand-name">${esc(c.name||cvName(c))}</div>
+       <a href="#" class="cand-name" onclick="openD(${jid});return false" title="Открыть карточку кандидата">${esc(c.name||cvName(c))}</a>
        <div class="cand-role">${esc(role)}</div>
        <div class="cand-tags">${(c.skills||[]).slice(0,6).map(k=>`<span class="pill">${esc(k)}</span>`).join('')}</div>
        <div class="cand-checks">
