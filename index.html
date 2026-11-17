@@ -874,7 +874,7 @@ ru:{appName:'База кандидатов',appOrg:'ООО «Авесто Гру
  admLast:'Последняя синхронизация',admNext:'Следующая синхронизация',admLoaded:'Загружено кандидатов',
  admNewToday:'Новых за последнюю синхронизацию',admErr:'Ошибок последней синхронизации',admNever:'не проводилась',
  admSync:'Автоматическая синхронизация',admEvery:'Интервал',admOffLbl:'выключена',admRunNow:'Запустить сейчас',
- admLog:'Журнал синхронизаций',admLogEmpty:'Журнал пуст',admTabOnly:'Автосинхронизация работает, пока открыта эта вкладка.',
+ admLog:'Журнал синхронизаций',admLogEmpty:'Журнал пуст',admTabOnly:'Синхронизация берёт с Диска только новые и изменённые резюме, остальные не скачиваются. Запускается по расписанию, отсчёт идёт от последней синхронизации, а не от открытия страницы. Работает, пока платформа открыта хотя бы в одной вкладке; при нескольких открытых вкладках синхронизирует только одна.',
  admUsers:'Пользователи и роли',admUserHint:'Список ведётся в этом браузере и служит журналом доступа, а не защитой: права на данные выдаёт сам Битрикс24.',
  admName:'Имя',admRole:'Роль',admAccess:'Доступ',admAdd:'Добавить',
  roleHr:'HR / Рекрутер',roleAdmin:'Администратор',roleHead:'Руководитель',
@@ -3359,10 +3359,34 @@ async function srvList(root){
   return j;
 }
 let BX_SYNCING = false;
-async function bxSync(){
-  if(BX_SYNCING){ toast('Синхронизация уже идёт'); return; }   // ежечасный запуск не накладывается на идущий
+/* Синхронизация инкрементальная: список папки читается целиком (это быстро), а скачиваются
+   и разбираются только новые файлы и файлы, изменённые на Диске после прошлого разбора.
+   Автоматически — не чаще интервала (по умолчанию раз в час) от последней синхронизации,
+   и только в одной вкладке: остальные видят «замок» в localStorage и ждут. */
+const SYNC_TAB = Math.random().toString(36).slice(2);
+const SYNC_LOCK_TTL = 10*60000;                       // замок без продления 10 минут — вкладку закрыли
+function syncLock(take){
+  try{
+    const l = JSON.parse(localStorage.getItem('avb_sync_lock')||'null');
+    if(take===false){ if(l && l.tab===SYNC_TAB) localStorage.removeItem('avb_sync_lock'); return true; }
+    if(l && l.tab!==SYNC_TAB && Date.now()-l.t < SYNC_LOCK_TTL) return false;
+    localStorage.setItem('avb_sync_lock', JSON.stringify({tab:SYNC_TAB, t:Date.now()}));
+    return true;
+  }catch(e){ return true; }
+}
+function syncFresh(){                                 // свежие данные о синхронизациях (их могла сделать другая вкладка)
+  try{ const x = JSON.parse(localStorage.getItem('avb_sync')||'null'); if(x){ SYNC.last = x.last; SYNC.log = x.log||SYNC.log; SYNC.interval = x.interval ?? SYNC.interval; } }catch(e){}
+}
+async function bxSync(opts={}){
+  if(BX_SYNCING){ if(!opts.auto) toast('Синхронизация уже идёт'); return; }   // ежечасный запуск не накладывается на идущий
+  if(opts.auto){
+    syncFresh();
+    const every = (SYNC.interval || DEFAULT_SYNC_MIN) * 60000;
+    if(SYNC.last && Date.now() - SYNC.last < every - 30000) return;          // недавно уже синхронизировали
+    if(!syncLock()) return;                                                 // идёт в другой вкладке
+  } else syncLock();
   BX_SYNCING = true;
-  try{ await bxSyncRun(); } finally { BX_SYNCING = false; }
+  try{ await bxSyncRun(); } finally { BX_SYNCING = false; syncLock(false); }
   if(DATA.some(c=>c.scan && !c.ocrTried) && !window.AVB_NO_AUTOSYNC) ocrScans({log:true, quiet:true});   // сканы — сразу в распознавание
 }
 async function bxSyncRun(){
@@ -3412,11 +3436,15 @@ async function bxSyncRun(){
     bxLog('✓ '+esc(T('bxFound'))+': '+files.length,'ok');
     const existing = new Set(DATA.map(c=>c.id));
     const fresh=[]; let errCount=0, netFails=0, okDownloads=0, stopped=null, metaCnt=0, savedCnt=0, savedMeta=0, scanCnt=0;
+    let changedCnt=0, sameCnt=0, newCnt=0; const touched=[];          // мелкие правки старых записей — пакетами
+    const DAY = 24*3600e3, nowT = Date.now();
+    const verOf = f => f.UPDATE_TIME || f.CREATE_TIME || (f.SIZE ? 'size:'+f.SIZE : null);   // версия файла на Диске
     const byId = new Map(DATA.map(c=>[c.id,c]));
     const prog = document.createElement('div'); prog.className = 'w live';
     document.getElementById('bxLog').appendChild(prog);
     const tStart = Date.now();
     const flush = async () => {                                              // записываем порциями — счётчик растёт сразу
+      if(touched.length){ await dbPut(touched.splice(0)); }
       if(!fresh.length) return;
       await dbPut(fresh); savedCnt += fresh.length; savedMeta += metaCnt; metaCnt = 0; fresh.length = 0;
       DATA = await dbAll(); refresh();
@@ -3430,10 +3458,25 @@ async function bxSyncRun(){
         prog.textContent = '… разбираем резюме: '+(i+1)+' из '+files.length+' — '+[...(f.PATH||[]), f.NAME].join(' / ')
           + (done>=10 ? ' · осталось ≈ '+(left<90e3 ? Math.ceil(left/1000)+' с' : Math.ceil(left/60e3)+' мин') : '');
       }
-      if(fresh.length >= 50) await flush();
+      if(fresh.length >= 50 || touched.length >= 300){ await flush(); syncLock(); }                  // продлеваем замок вкладки
       if(existing.has(id)){
         const old = byId.get(id);
         let ch = false;
+        const ver = verOf(f);
+        // файл заменили на Диске после прошлого разбора — разбираем заново (статус и решение по кандидату сохраняются)
+        if(old && !old.meta && ver && old.bxVer && ver!==old.bxVer && !stopped){
+          try{
+            const blob = await bxFetchFile(f); okDownloads++;
+            const txt = await readFileText(new File([blob], f.NAME));
+            const full = parseResume(txt,{id,file:f.NAME,folder:f.folder||old.folder,size:blob.size,source:'bitrix',url:f.DETAIL_URL||old.url,
+              mtime:old.applied, fileMime: blob.type || mimeByName(f.NAME)});
+            if(f.SRV) full.srv = true; else { await filePut(id, blob); full.hasFile = true; }
+            Object.assign(old, full, {name: (old.bxPersonDir && old.name) ? old.name : (full.name||old.name), status: old.status, verdict: old.verdict,
+              added: old.added, applied: old.applied||full.applied, bxPersonDir: old.bxPersonDir, meta:false, bxVer: ver, ocrTried: null});
+            changedCnt++; await dbPut([old]); continue;
+          }catch(e){ if(e.kind==='net'){ netFails++; if(netFails>=3 && !okDownloads) stopped = e; } }
+        }
+        if(old && ver && !old.bxVer){ old.bxVer = ver; ch = true; }          // первая отметка версии — без скачивания
         if(old && f.folder && old.folder!==f.folder){ old.folder = f.folder; ch = true; }
         if(old && f.personDir && old.bxPersonDir!==f.personDir){
           old.bxPersonDir = f.personDir;
@@ -3442,27 +3485,34 @@ async function bxSyncRun(){
           if(pd && pd.applied && !old.applied) old.applied = pd.applied;
           ch = true;
         }
-        if(old && old.meta && !stopped){
-          // раньше записан только по папке — пробуем разобрать резюме полностью
+        if(old && old.meta && !stopped && !(old.metaTried && nowT - old.metaTried < DAY)){
+          // раньше записан только по папке — пробуем разобрать резюме полностью (не чаще раза в сутки)
+          old.metaTried = nowT; ch = true;
           try{
             const blob = await bxFetchFile(f); okDownloads++;
             const txt = await readFileText(new File([blob], f.NAME));
             const full = parseResume(txt,{id,file:f.NAME,folder:f.folder,size:blob.size,source:'bitrix',url:f.DETAIL_URL,
               mtime:old.applied, fileMime: blob.type || mimeByName(f.NAME)});
             if(f.SRV) full.srv = true; else { await filePut(id, blob); full.hasFile = true; }
-            Object.assign(old, full, {name: full.name||old.name, status: old.status, verdict: old.verdict, added: old.added, applied: old.applied||full.applied, meta:false});
+            Object.assign(old, full, {name: full.name||old.name, status: old.status, verdict: old.verdict, added: old.added, applied: old.applied||full.applied, meta:false, bxVer: verOf(f)});
+            changedCnt++;
             ch = true;
           }catch(e){ if(e.kind==='net'){ netFails++; if(netFails>=3 && !okDownloads) stopped = e; } }
         }
-        else if(old && !old.meta && !old.hasFile && !old.fileData && !old.gdFileId && !stopped){
-          // раньше из Битрикс сохранялся только текст — докачиваем сам файл для Google Drive
+        else if(old && !old.meta && !old.hasFile && !old.fileData && !old.gdFileId && !stopped
+                && !f.SRV && !old.srv && !(old.fileTried && nowT - old.fileTried < DAY)){
+          // раньше из Битрикс сохранялся только текст — докачиваем сам файл для Google Drive.
+          // Файлы с сервера портала (api.php) не докачиваем: они и так открываются прямо с Диска.
+          old.fileTried = nowT; ch = true;
           try{ const rb = await bxFetchFile(f); okDownloads++;
                if(f.SRV) old.srv = true; else { await filePut(id, rb); old.hasFile = true; } old.fileMime = rb.type || mimeByName(f.NAME); ch = true; }
           catch(e){ if(e.kind==='net'){ netFails++; if(netFails>=3 && !okDownloads) stopped = e; } }
         }
-        if(ch) await dbPut([old]);
+        if(ch) touched.push(old);
+        sameCnt++;
         continue;
       }
+      newCnt++;
       // скачивание запрещено сервером — записываем кандидата по названиям папок
       if(stopped){ fresh.push(bxMetaRecord(f)); existing.add(id); metaCnt++; continue; }
       try{
@@ -3472,6 +3522,7 @@ async function bxSyncRun(){
           mtime:(f.UPDATE_TIME||f.CREATE_TIME)?Date.parse(f.UPDATE_TIME||f.CREATE_TIME)||null:null,
           fileMime: blob.type || mimeByName(f.NAME)});
         if(f.SRV) c.srv = true; else { await filePut(id, blob); c.hasFile = true; }
+        c.bxVer = verOf(f);
         if(f.personDir){ const pd = personFromDir(f.personDir); c.bxPersonDir = f.personDir;
           if(pd && pd.name){ c.name = pd.name; c.gender = pickGender(pd.name); } if(pd && pd.applied) c.applied = pd.applied; }
         fresh.push(c); existing.add(id);
@@ -3495,8 +3546,10 @@ async function bxSyncRun(){
     DATA = await dbAll(); refresh(); renderFav();
     const mins = ((Date.now()-tStart)/60e3);
     bxLog('✓ '+esc(T('bxAdded'))+': '+savedCnt+(savedMeta?' (с разбором резюме: '+(savedCnt-savedMeta)+', по названиям папок: '+savedMeta+')':'')
+      + (changedCnt?' · обновлено изменённых: '+changedCnt:'') + ' · без изменений: '+(sameCnt-changedCnt)+' (не скачивались)'
       + (scanCnt?' · сканов без текста: '+scanCnt:'') + ' · за '+(mins<1 ? Math.round(mins*60)+' с' : mins.toFixed(1)+' мин'),'ok');
-    logSync(files.length, savedCnt, errCount);
+    logSync(files.length, savedCnt, errCount, changedCnt);
+    bxLog('Следующая автоматическая синхронизация — '+esc(nextSyncText())+'.');
     if(GD_TOKEN){
       bxLog('… Отправляем базу и резюме в Google Drive');
       const ok = await gdSaveDb();
@@ -4297,12 +4350,12 @@ function renderAdmin(){
 
   admLogBox.innerHTML = SYNC.log.length
     ? SYNC.log.slice(0,8).map(l=>`<div class="row-line"><span class="k">${esc(fmtDT(l.t))}</span>
-        <span>+<b class="num">${l.added}</b> / ${l.found}${l.errors?` · <span style="color:var(--danger)">${l.errors}</span>`:''}</span></div>`).join('')
+        <span title="новых / изменённых / всего файлов на Диске">+<b class="num">${l.added}</b>${l.changed?` · ↻ ${l.changed}`:''} / ${l.found}${l.errors?` · <span style="color:var(--danger)">${l.errors}</span>`:''}</span></div>`).join('')
     : `<p class="hint">${esc(T('admLogEmpty'))}</p>`;
 
   syncChips.innerHTML = SYNC_STEPS.map(m=>`<span class="chip ${SYNC.interval===m?'selected':''}" onclick="setSync(${m})">${
     m===0 ? esc(T('admOffLbl')) : (m<60 ? m+' мин' : (m===1440?'24 '+(LANG==='tj'?'соат':'часа'):(m/60)+' '+(LANG==='tj'?'соат':'ч')))}</span>`).join('');
-  syncNext.textContent = SYNC.interval ? T('admEvery')+': '+SYNC.interval+' мин' : '';
+  syncNext.textContent = SYNC.interval ? T('admEvery')+': '+SYNC.interval+' мин · следующая — '+nextSyncText() : '';
 
   uRole.innerHTML = Object.keys(ROLES).map(r=>`<option value="${r}">${esc(T(ROLES[r][0]))}</option>`).join('');
   usersTbl.innerHTML = USERS.length
@@ -4422,19 +4475,34 @@ async function bootSync(){
     const hook = bxHook.value.trim();
     const canRead = BX_APP || await srvApi() || (hook && !hookProblem(hook));
     if(!canRead) return;
-    const every = (SYNC.interval || DEFAULT_SYNC_MIN) * 60000;
-    if(SYNC.last && Date.now() - SYNC.last < every) return;
-    setTimeout(()=>{ bxSync().catch(()=>{}); }, 2500);
+    syncFresh();
+    if(!SYNC.interval) return;                                              // автосинхронизация выключена
+    const every = SYNC.interval * 60000;
+    if(SYNC.last && Date.now() - SYNC.last < every) return;                 // последняя была меньше часа назад — ждём расписания
+    setTimeout(()=>{ bxSync({auto:true}).catch(()=>{}); }, 2500);
   }catch(e){}
 }
+/* Следующий запуск — через «интервал» после последней синхронизации, а не после открытия вкладки.
+   Таймер проверяет раз в минуту: так расписание не сбивается, если компьютер засыпал. */
 function armSync(){
   if(SYNC_TIMER){ clearInterval(SYNC_TIMER); SYNC_TIMER=null; }
   if(!SYNC.interval) return;
-  SYNC_TIMER = setInterval(()=>{ if(bxFolder.value.trim()) bxSync(); }, SYNC.interval*60000);
+  SYNC_TIMER = setInterval(()=>{
+    if(!bxFolder.value.trim() || BX_SYNCING) return;
+    syncFresh();
+    if(!SYNC.last || Date.now() - SYNC.last >= SYNC.interval*60000) bxSync({auto:true}).catch(()=>{});
+  }, 60000);
 }
-function logSync(found, added, errors){
+function nextSyncText(){
+  if(!SYNC.interval) return 'автосинхронизация выключена';
+  if(!SYNC.last) return 'при следующем открытии';
+  const t = new Date(SYNC.last + SYNC.interval*60000);
+  return t <= new Date() ? 'сейчас' : 'в '+String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0');
+}
+function logSync(found, added, errors, changed){
+  syncFresh();
   SYNC.last = Date.now();
-  SYNC.log.unshift({t:SYNC.last, found, added, errors});
+  SYNC.log.unshift({t:SYNC.last, found, added, errors, changed:changed||0});
   if(SYNC.log.length>30) SYNC.log.length=30;
   LSS('avb_sync', SYNC); renderAdmin();
 }
