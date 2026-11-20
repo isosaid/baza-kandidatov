@@ -295,6 +295,7 @@ body.locked #login{display:flex}
       <input type="checkbox" id="lgRemember"> Запомнить на этом компьютере (30 дней)</label>
     <div class="err" id="lgErr"></div>
     <button class="btn btn-primary" id="lgBtn" type="submit">Войти</button>
+    <div style="margin-top:12px;font-size:11px;color:var(--ink-soft);text-align:center">версия от 20.11.2026</div>
   </form>
 </div>
 
@@ -4394,7 +4395,7 @@ async function doLogin(){
   const err = document.getElementById('lgErr'), btn = document.getElementById('lgBtn');
   const show = m => { err.textContent = m; err.style.display = 'block'; };
   if(Date.now() < AUTH_WAIT) return show('Слишком много попыток. Подождите '+Math.ceil((AUTH_WAIT-Date.now())/1000)+' с.');
-  const login = lgLogin.value.trim().toLowerCase(), pass = lgPass.value;
+  const login = lgLogin.value.trim().toLowerCase(), pass = lgPass.value.trim();   // пробел при копировании пароля из сообщения — частая причина «неверного пароля»
   if(!login || !pass) return show('Введите логин и пароль.');
   if(!(window.crypto && crypto.subtle)) return show('Браузер не поддерживает проверку пароля. Откройте платформу по адресу https://');
   btn.disabled = true; btn.textContent = 'Проверяем…';
