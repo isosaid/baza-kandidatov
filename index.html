@@ -102,6 +102,11 @@ nav.primary{display:flex;flex-direction:column;gap:2px}
 .btn-danger{background:var(--danger);color:#fff}
 .fit-on{background:var(--accent-soft);border-color:#CBE3D6;color:var(--accent)}
 .unfit-on{background:var(--danger-soft);border-color:#EACFC8;color:var(--danger)}
+.apps{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0 2px;font-size:12.5px}
+.apps-lbl{color:var(--ink-soft);margin-right:2px}
+.app-chip{display:inline-block;padding:4px 10px;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--ink);text-decoration:none;font-size:12.5px}
+.app-chip:hover{border-color:var(--accent);color:var(--accent)}
+.app-chip.cur{background:#EAF3EE;border-color:#BFD9CB}
 .btn-more{padding:11px 26px;font-size:14.5px;font-weight:600;border-radius:10px;min-width:150px}
 .btn-sm{padding:7px 12px;font-size:12.5px}
 .btn:disabled{opacity:.45;cursor:not-allowed}
@@ -2488,6 +2493,130 @@ function matchQuery(c,q){
   const hay = norm([c.name,c.position,c.folder,c.org,c.city,c.email,c.phone,c.lastJob,(c.skills||[]).join(' '),(c.langs||[]).join(' '),c.raw].join(' '));
   return norm(q).split(' ').filter(Boolean).every(w=>hay.includes(w));
 }
+/* ===== Один человек — одна карточка =====
+   Резюме считаются одним кандидатом, если совпадает хотя бы одно:
+   - телефон (последние 9 цифр) или email;
+   - текст резюме (тот же файл, загруженный несколько раз);
+   - имя, записанное по-разному («Мухаммад Икбол Ахмедов» = «Мухаммадикбол Ахмедов» = «Ахмедов Мухаммадикбол»;
+     латиница/кириллица; таджикские буквы; удвоенные буквы; с отчеством и без) — и при этом резюме похожи по тексту
+     и контакты не противоречат друг другу (разные телефоны — разные люди).
+   Опечатка в имени (одна буква) объединяется, только если тексты резюме почти одинаковые. */
+const NM_LAT = [['shch','щ'],['sh','ш'],['ch','ч'],['kh','х'],['zh','ж'],['ts','ц'],['yu','ю'],['ya','я'],['yo','е'],['j','ч'],
+  ['a','а'],['b','б'],['v','в'],['g','г'],['d','д'],['e','е'],['z','з'],['i','и'],['y','и'],['k','к'],['l','л'],['m','м'],['n','н'],
+  ['o','о'],['p','п'],['r','р'],['s','с'],['t','т'],['u','у'],['f','ф'],['h','х'],['q','к'],['c','к'],['x','кс'],['w','в']];
+function nameSkel(w){
+  w = String(w||'').toLowerCase();
+  if(/[a-z]/.test(w)) NM_LAT.forEach(([a,b])=>{ w = w.split(a).join(b); });
+  return w.replace(/дж/g,'ч').replace(/[ҷ]/g,'ч').replace(/[ҳ]/g,'х').replace(/[ӣйы]/g,'и').replace(/[ӯ]/g,'у').replace(/[қ]/g,'к')
+          .replace(/[ғ]/g,'г').replace(/[ёэ]/g,'е').replace(/[ъь'’`]/g,'').replace(/[^а-я]/g,'').replace(/(.)\1+/g,'$1');
+}
+const PATRON_RX = /(вич|вна|ична|ович|евич|овна|евна|зода|кизи|кизы|угли|оглы)$/;
+function nameTokens(c){
+  const t = String(dispName(c)||'').split(/[\s_.\-]+/).map(nameSkel).filter(w=>w.length>=2);
+  return t.length>=2 && t.length<=5 ? t : [];
+}
+function nameJoins(t){                               // все порядки слов, склеенные: «мухамадикболахмедов»…
+  const out = new Set(), perm = (rest, acc) => { if(!rest.length){ out.add(acc.join('')); return; } rest.forEach((w,i)=>perm(rest.filter((_,j)=>j!==i), acc.concat(w))); };
+  perm(t.slice(0,5), []);
+  return out;
+}
+function lev(a,b){ if(Math.abs(a.length-b.length)>2) return 9; const d=[...Array(b.length+1).keys()];
+  for(let i=1;i<=a.length;i++){ let prev=d[0]; d[0]=i; for(let j=1;j<=b.length;j++){ const t=d[j]; d[j]=Math.min(d[j]+1,d[j-1]+1,prev+(a[i-1]===b[j-1]?0:1)); prev=t; } } return d[b.length]; }
+function nameInfo(c){                               // имя без отчества и все его склейки — считаем один раз на запись
+  if(c._ni && c._ni.src===dispName(c)) return c._ni;
+  let t = nameTokens(c); if(t.length>2) t = t.filter(w=>!PATRON_RX.test(w));   // отчество может быть не у всех
+  const ni = {src:dispName(c), t, j: t.length ? nameJoins(t) : new Set()};
+  Object.defineProperty(c,'_ni',{value:ni, enumerable:false, configurable:true, writable:true});
+  return ni;
+}
+function nameCmp(a, b){                              // 2 — то же имя, 1 — отличается одной буквой, 0 — разные
+  const ja = nameInfo(a).j, jb = nameInfo(b).j;
+  if(!ja.size || !jb.size) return 0;
+  for(const x of ja) if(jb.has(x)) return 2;
+  for(const x of ja){ for(const y of jb){ if(Math.max(x.length,y.length)>=9 && lev(x,y) <= 1) return 1; } }   // одна буква — опечатка
+  return 0;
+}
+const phoneKeys = c => uniq([c.phone, ...(c.phones||[])].filter(Boolean).map(p=>String(p).replace(/\D/g,'').slice(-9)).filter(p=>p.length>=7));
+const mailKeys = c => uniq([c.email, ...(c.emails||[])].filter(Boolean).map(e=>String(e).trim().toLowerCase()));
+function textSet(c){
+  if(c._ts) return c._ts;
+  const set = new Set();
+  norm(String(c.raw||'').slice(0,6000)).split(/[^a-zа-я0-9]+/).forEach(w=>{ if(w.length>=4 && !/^\d+$/.test(w)) set.add(w.slice(0,7)); });
+  Object.defineProperty(c,'_ts',{value:set, enumerable:false, configurable:true});
+  return set;
+}
+function textSim(a,b){
+  const A = textSet(a), B = textSet(b); if(A.size<15 || B.size<15) return null;
+  let n=0; const [x,y] = A.size<B.size?[A,B]:[B,A]; x.forEach(w=>{ if(y.has(w)) n++; });
+  return n / (A.size + B.size - n);
+}
+const rawKey = c => { const t = norm(String(c.raw||'')).replace(/\s+/g,' ').trim(); return t.length>300 ? t.slice(0,1500) : null; };
+function keysOf(c){
+  if(!c._pk) Object.defineProperty(c,'_pk',{value:{p:phoneKeys(c), e:mailKeys(c), r:rawKey(c)}, enumerable:false, configurable:true});
+  return c._pk;
+}
+function samePerson(a, b, kind){
+  const A = keysOf(a), B = keysOf(b);
+  if(A.p.some(x=>B.p.includes(x)) || A.e.some(x=>B.e.includes(x))){
+    // общий телефон агентства или компании у разных людей: при явно разных именах не объединяем
+    const named = nameInfo(a).j.size && nameInfo(b).j.size;
+    if(!named || nameCmp(a,b) || (textSim(a,b)||0) >= 0.5) return 'контакт';
+    return null;
+  }
+  if(A.r && A.r===B.r) return 'текст';
+  if(kind==='r'){ const sim = textSim(a,b); if(sim!==null && sim>=0.92) return 'текст'; }      // тот же файл, имя не распозналось
+  if((A.p.length && B.p.length) || (A.e.length && B.e.length)) return null;    // у обоих есть контакты, и они разные — разные люди
+  const nm = nameCmp(a,b); if(!nm) return null;
+  const sim = textSim(a,b);
+  if(nm===2 && (sim===null ? !!(a.meta||b.meta) : sim>=0.5)) return 'имя';
+  if(nm===1 && sim!==null && sim>=0.75) return 'имя';
+  return null;
+}
+let PERSONS = null;                                  // {of: Map(id → root id), groups: Map(root → [записи])}
+function personIndex(){
+  let h = DATA.length; for(const c of DATA){ h = (h*31 + (c.added||0)%9973 + (c.name||'').length + (c.raw||'').length) % 1e9; }
+  const sig = DATA.length+':'+h;
+  if(PERSONS && PERSONS.sig===sig) return PERSONS;
+  const par = new Map(DATA.map(c=>[c.id,c.id])), why = new Map();
+  const find = x => { while(par.get(x)!==x){ par.set(x, par.get(par.get(x))); x = par.get(x); } return x; };
+  const union = (a,b,r) => { const x=find(a), y=find(b); if(x!==y){ par.set(y,x); why.set(b,r); } };
+  // блоки: телефон, email, текст, слова имени — сравниваем только внутри блока
+  const blocks = new Map(), put = (k,c) => { if(!blocks.has(k)) blocks.set(k,[]); blocks.get(k).push(c); };
+  DATA.forEach(c=>{
+    const K = keysOf(c);
+    K.p.forEach(k=>put('p'+k,c)); K.e.forEach(k=>put('e'+k,c));
+    if(K.r) put('r'+K.r.slice(0,200), c);
+    // слова имени целиком (без отчества); склеенное имя — для «Мухаммадикбол» = «Мухаммад Икбол»
+    const ni = nameInfo(c); ni.t.forEach(w=>{ if(w.length>=4) put('n'+w, c); });
+  });
+  blocks.forEach((list, key)=>{
+    if(list.length<2 || list.length>400) return;                 // очень частое имя — сравнение идёт по фамилии
+    const kind = key[0];
+    for(let i=0;i<list.length;i++) for(let j=i+1;j<list.length;j++){
+      const a=list[i], b=list[j]; if(find(a.id)===find(b.id)) continue;
+      const r = samePerson(a,b,kind); if(r) union(a.id,b.id,r);
+    }
+  });
+  const groups = new Map();
+  DATA.forEach(c=>{ const r = find(c.id); if(!groups.has(r)) groups.set(r,[]); groups.get(r).push(c); });
+  groups.forEach(g=>g.sort((a,b)=>(b.applied||0)-(a.applied||0)));
+  PERSONS = {sig, of:new Map(DATA.map(c=>[c.id, find(c.id)])), groups, why};
+  return PERSONS;
+}
+const personOf = c => { const P = personIndex(); return P.groups.get(P.of.get(c.id)) || [c]; };
+/* Позиции, на которые подавал человек: вакансия (папка) или должность, с датой и процентом */
+function appsHtml(c, scoreOf){
+  const g = personOf(c); if(g.length<2) return '';
+  const byPos = new Map();
+  g.forEach(x=>{ const k = posOf(x)||'без вакансии'; if(!byPos.has(k)) byPos.set(k,[]); byPos.get(k).push(x); });
+  const chips = [...byPos.entries()].map(([pos, xs])=>{
+    const x = xs[0], sc = scoreOf ? scoreOf(x) : null, cur = xs.some(y=>y.id===c.id);
+    return `<a href="#" class="app-chip${cur?' cur':''}" onclick="event.stopPropagation();openD(${jsArg(x.id)});return false" title="${esc(cvName(x))}">${esc(pos)}${xs.length>1?' ×'+xs.length:''}${sc!=null?' · <b>'+sc+'%</b>':''}${x.applied?' · '+esc(fmtDate(x.applied)):''}</a>`;
+  }).join('');
+  const same = byPos.size===1 ? 'Одно резюме загружено '+g.length+' раза' : 'Подавал на '+byPos.size+' '+(byPos.size<5?'позиции':'позиций');
+  return `<div class="apps"><span class="apps-lbl">${esc(same)}:</span>${chips}</div>`;
+}
+
 function currentFiltered(){
   const q=qs.value, ci=fCity.value, ed=fEdu.value, st=fStatus.value;
   return DATA.filter(c=>matchQuery(c,q)
@@ -2497,14 +2626,18 @@ function currentFiltered(){
 }
 function renderBase(){
   fillSelects();
-  const rows = currentFiltered().sort((a,b)=>{
+  const P = personIndex(), seen = new Set();
+  const rows = currentFiltered().sort((a,b)=>(b.applied||0)-(a.applied||0))
+    .filter(c=>{ const k = P.of.get(c.id)||c.id; if(seen.has(k)) return false; seen.add(k); return true; })   // последний отклик человека
+    .sort((a,b)=>{
     const k=SORT.k; let x=a[k],y=b[k];
     if(k==='name'||k==='city'||k==='position'||k==='category'||k==='status'){ x=norm(x||'я'); y=norm(y||'я'); return x<y?-SORT.d:x>y?SORT.d:0; }
     return ((x??-1)-(y??-1))*SORT.d;
   });
-  baseCnt.textContent = rows.length + ' / ' + DATA.length;
-  navBaseCnt.textContent = DATA.length;
-  document.querySelectorAll('[data-basecnt]').forEach(e=>e.textContent = DATA.length);
+  const people = P.groups.size;
+  baseCnt.textContent = rows.length + ' / ' + people + (people<DATA.length ? ' · резюме: '+DATA.length : '');
+  navBaseCnt.textContent = people; navBaseCnt.title = 'кандидатов: '+people+' · резюме: '+DATA.length;
+  document.querySelectorAll('[data-basecnt]').forEach(e=>e.textContent = people);
   if(!DATA.length){ tblBase.innerHTML=''; baseEmpty.innerHTML=`<div class="empty"><div class="big">${esc(T('emptyBase'))}</div><div>${esc(T('emptyBaseSub'))}</div></div>`; renderScans(); return; }
   if(!rows.length){ tblBase.innerHTML=''; baseEmpty.innerHTML=`<div class="empty"><div class="big">${esc(T('nothing'))}</div><div>${esc(T('nothingSub'))}</div></div>`; renderScans(); return; }
   baseEmpty.innerHTML='';
@@ -2515,7 +2648,8 @@ function renderBase(){
    return `<tr class="clk" onclick="openD(${jsArg(c.id)})">
      <td><div class="nm">${esc(dispName(c))}</div><div class="mut">${c.meta?'<span style="color:var(--warn)">без разбора · </span>':''}${esc(c.phone||c.email||c.file)}</div></td>
      <td>${c.category?`<span class="pill">${esc(c.category)}</span>`:'<span class="mut">—</span>'}</td>
-     <td>${esc(posOf(c)||'—')}${c.org?`<div class="mut">${esc(c.org)}</div>`:''}</td>
+     <td>${esc(posOf(c)||'—')}${c.org?`<div class="mut">${esc(c.org)}</div>`:''}${(()=>{ const g = P.groups.get(P.of.get(c.id))||[]; if(g.length<2) return '';
+        const ps = uniq(g.map(x=>posOf(x)||'без вакансии')); return `<div class="mut" title="${esc(ps.join(', '))}" style="color:var(--accent)">${ps.length>1?'откликов: '+g.length+' — '+esc(ps.filter(x=>x!==(posOf(c)||'без вакансии')).slice(0,2).join(', '))+(ps.length>3?'…':''):'загружено '+g.length+' раза'}</div>`; })()}</td>
      <td>${c.exp!=null?c.exp+' '+esc(T('yrs')):'<span class="mut">—</span>'}</td>
      <td>${esc(c.city||'—')}</td>
      <td class="num" style="font-weight:400">${esc(fmtDate(c.applied))}</td>
@@ -2649,8 +2783,14 @@ function runMatch(){
   const MIN_SCORE = 30;
   const hasCrit = scored.length && !scored[0].noCrit;
   const aboveThreshold = scored.filter(s => !s.out && s.score >= MIN_SCORE);
-  const keep = (hasCrit && aboveThreshold.length > 0 ? aboveThreshold : scored.filter(s=>!s.out))
-    .sort(cmp).slice(0, top);
+  // один человек — одна карточка: берём его лучший отклик, остальные показываем позициями на карточке
+  const best = new Map(), P = personIndex();
+  (hasCrit && aboveThreshold.length > 0 ? aboveThreshold : scored.filter(s=>!s.out)).sort(cmp).forEach(sc=>{
+    const k = P.of.get(sc.c.id) || sc.c.id; if(!best.has(k)) best.set(k, sc);
+  });
+  const SC = new Map(scored.map(x=>[x.c.id, x.score]));
+  const keep = [...best.values()].slice(0, top);
+  keep.forEach(x=>{ x.scoreOf = y => SC.has(y.id) ? SC.get(y.id) : null; });
   const out = scored.filter(s=>s.out).length;
   const below = hasCrit ? scored.filter(s=>!s.out && s.score < MIN_SCORE).length : 0;
   LAST_SHORT = keep;
@@ -2685,6 +2825,7 @@ function candCard(s,i){
      <div class="cand-main">
        <a href="#" class="cand-name" onclick="openD(${jid});return false" title="Открыть карточку кандидата">${esc(dispName(c))}</a>
        <div class="cand-role" onclick="openD(${jid})" style="cursor:pointer">${esc(role)}</div>
+       ${appsHtml(c, s.scoreOf)}
        <div class="cand-tags">${(c.skills||[]).slice(0,6).map(k=>`<span class="pill">${esc(k)}</span>`).join('')}</div>
        <div class="cand-checks">
          ${s.why.map(w=>`<div class="check-ok">${ICON_OK}${esc(w)}</div>`).join('')}
@@ -2844,6 +2985,7 @@ function renderDetail(){
     <div>
       <h2>${esc(dispName(c))}</h2>
       <div class="sub">${esc([posOf(c), c.org, c.city, c.exp!=null?c.exp+' '+T('yrs'):null].filter(Boolean).join(' · '))}</div>
+      ${appsHtml(c, LAST_CRIT ? (x=>{ try{ return scoreCandidate(x, LAST_CRIT).score; }catch(e){ return null; } }) : null)}
       <div class="file-badges">
         <span class="file-badge" title="Исходный файл: ${esc(c.file||'')}">${esc(cvName(c))}</span>
         <span class="file-badge">${esc(T('source'))}: ${c.source==='bitrix'?'Битрикс24':esc(T('local'))}</span>
@@ -2902,7 +3044,7 @@ async function saveCard(){
   const c = DATA.find(x=>x.id===OPEN_ID); if(!c) return;
   const v = id => (document.getElementById(id)?.value||'').trim();
   c.name = v('edName')||null; c.position = v('edPos')||null; c.org = v('edOrg')||null;
-  c.phone = v('edPhone')||null;
+  c.phone = v('edPhone')||null; PERSONS = null;      // телефон влияет на поиск повторов
   c.phones = c.phones||[]; if(c.phone && !c.phones.includes(c.phone)) c.phones=[c.phone,...c.phones];
   c.email = v('edMail')||null; c.city = v('edCity')||null;
   c.birth = +v('edBirth')||null; c.age = c.birth? new Date().getFullYear()-c.birth : null;
@@ -4542,7 +4684,7 @@ function go(v){
   if(v==='admin'){ renderBxMode(); renderBxHow(); renderAdmin(); }
   crumb(); window.scrollTo({top:0,behavior:'instant'});
 }
-function refresh(){ renderBase(); renderStats(); }
+function refresh(){ renderBase(); renderStats(); }   // повторы пересчитываются сами, когда меняется состав базы (PERSONS.sig)
 document.querySelectorAll('.nav-item').forEach(b=>b.addEventListener('click',()=>go(b.dataset.v)));
 
 /* drag & drop */
