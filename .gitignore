@@ -7,3 +7,4 @@ tests/last_run.json
 *.log
 .DS_Store
 tests/*.png
+bitrix/ai_config.php

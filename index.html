@@ -102,6 +102,7 @@ nav.primary{display:flex;flex-direction:column;gap:2px}
 .btn-danger{background:var(--danger);color:#fff}
 .fit-on{background:var(--accent-soft);border-color:#CBE3D6;color:var(--accent)}
 .unfit-on{background:var(--danger-soft);border-color:#EACFC8;color:var(--danger)}
+.ai-box{margin:8px 0 4px;padding:10px 12px;border:1px solid #CFE3D8;background:#F4FAF6;border-radius:10px;font-size:13px}
 .apps{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0 2px;font-size:12.5px}
 .apps-lbl{color:var(--ink-soft);margin-right:2px}
 .app-chip{display:inline-block;padding:4px 10px;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--ink);text-decoration:none;font-size:12.5px}
@@ -1644,6 +1645,26 @@ function dutyKeys(text){
 const MANAGE_RX = /(руковод|управлени[ея]\s+(команд|коллектив|персонал|отдел|сотрудник|подчин)|в подчинении|подчинённ|подчиненн|начальник|заведующ|team\s*lead|тимлид|head of|director)/i;
 const FORMAT_RX = {remote:/(удал[её]нн|remote|дистанционн)/i, hybrid:/(гибрид|hybrid)/i, office:/(офис|office)/i};
 
+/* Профиль работы кандидата — то, с чем сравниваются должность и функционал.
+   Берём только «Опыт работы» (или весь текст без «Образования»); образование и названия
+   компаний сюда не входят: «факультет транспортного строительства» и «SMM в строительной компании»
+   не делают человека строителем. */
+const ORG_RX = /(«[^»\n]{1,80}»|"[^"\n]{1,80}"|“[^”\n]{1,80}”|\b(?:ООО|ОАО|ЗАО|ОсОО|ГУП|ГУ|ИП|ЧП|ҶДММ|ҶСК|LLC|Ltd|Inc)\.?\s+[^\n,;]{1,60}|[а-яё]+(?:ая|ой|ую)\s+(?:компани|фирм|организаци|предприяти|холдинг)[а-яё]*)/gi;
+function roleProfile(c){
+  if(c._rp && c._rp.src===c.raw) return c._rp;
+  const raw = String(c.raw||''), exp = expScope(raw);
+  const work = exp.replace(ORG_RX, ' ');
+  const titles = [c.position||''];
+  exp.split('\n').forEach(l=>{
+    const t = l.replace(ORG_RX,' ').replace(/\(?\d{1,2}[./]\d{2,4}\)?|\b(19|20)\d{2}\b|[–—\-]\s*(по\s+)?наст[а-яё.]*(\s+время)?/gi,' ').replace(/\s+/g,' ').trim();
+    if(t.length>=3 && t.length<=70 && !/[@:]/.test(t) && !/^(обязанност|достижени|функци|задачи)/i.test(t)) titles.push(t);
+  });
+  const rp = {src:c.raw, work:' '+norm(work)+' ', titles:' '+norm(titles.join(' | '))+' ', exp:' '+norm(exp)+' '};
+  Object.defineProperty(c,'_rp',{value:rp, enumerable:false, configurable:true, writable:true});
+  return rp;
+}
+const stemHit = (src, w) => src.includes(w.slice(0, Math.max(4, w.length-2)));
+
 function scoreCandidate(c, crit){
   const why=[], miss=[], rows=[];
   const cSk = (c.skills||[]).map(norm);
@@ -1655,15 +1676,20 @@ function scoreCandidate(c, crit){
 
   // 1. Соответствие должности и функционала
   let titleHit = null;
+  const RP = roleProfile(c);
   if(crit.pos){
-    const p = norm(crit.pos), src = norm((c.position||'')+' '+(posOf(c)||'')+' '+raw.slice(0,500));
+    const p = norm(crit.pos);
     const words = p.split(' ').filter(w=>w.length>3);
-    titleHit = words.length ? words.filter(w=>src.includes(w.slice(0,Math.max(4,w.length-2)))).length/words.length : (src.includes(p)?1:0);
+    // должности, которые человек занимал (и заголовок резюме); вакансия, на которую он откликнулся, — не его опыт
+    titleHit = words.length ? words.filter(w=>stemHit(RP.titles, w)).length/words.length : (RP.titles.includes(p)?1:0);
+    if(c.meta && !raw){                                              // резюме не разобрано — есть только папка вакансии
+      const f = norm(posOf(c)||''); titleHit = words.length ? 0.5*words.filter(w=>stemHit(f,w)).length/words.length : 0;
+    }
   }
   const dKeys = crit.duties ? dutyKeys(crit.duties).filter(k=>!(crit.pos && norm(crit.pos).includes(k))) : [];
   let dutyHit = null;
   if(dKeys.length >= 3){
-    const found = dKeys.filter(k=>hay.includes(k));
+    const found = dKeys.filter(k=>RP.work.includes(k));             // только описание прошлой работы
     dutyHit = Math.min(1, found.length / Math.max(3, dKeys.length*0.6));    // 60% обязанностей в опыте — уже полное совпадение
     if(dutyHit >= 0.6) why.push('функционал совпадает');
     else if(dutyHit < 0.25) miss.push('функционал на прошлых местах другой');
@@ -1684,9 +1710,13 @@ function scoreCandidate(c, crit){
     else { yearsR = Math.max(0,c.exp/crit.exp)*0.7*relev; miss.push(T('expLow')+' ('+(c.exp??'—')+'/'+crit.exp+')'); }
   }
   if(crit.ind && crit.ind.length){
-    const ok = crit.ind.some(i=>hasKey(hay, i) || (norm(i).length>=5 && hay.includes(norm(i).slice(0,6))));
-    indR = ok ? 1 : 0;
-    if(ok) why.push('опыт в отрасли: '+crit.ind.join(', ')); else miss.push('нет опыта в отрасли: '+crit.ind.join(', '));
+    // отрасль ищем только в опыте работы (не в образовании); полный балл — если и роль была по профилю
+    const inInd = crit.ind.some(i=>hasKey(RP.exp, i) || (norm(i).length>=5 && RP.exp.includes(norm(i).slice(0,6))));
+    const onRole = (titleHit!==null && titleHit>=0.5) || (dutyHit!==null && dutyHit>=0.5) || (titleHit===null && dutyHit===null);
+    indR = inInd ? (onRole ? 1 : 0.25) : 0;
+    if(inInd && onRole) why.push('опыт в отрасли: '+crit.ind.join(', '));
+    else if(inInd) miss.push('в отрасли «'+crit.ind.join(', ')+'» работал(а) не по профилю');
+    else miss.push('нет опыта в отрасли: '+crit.ind.join(', '));
   }
   if(yearsR!==null || indR!==null) add('exp', yearsR!==null && indR!==null ? 0.75*yearsR + 0.25*indR : (yearsR ?? indR));
 
@@ -2789,8 +2819,12 @@ function runMatch(){
     const k = P.of.get(sc.c.id) || sc.c.id; if(!best.has(k)) best.set(k, sc);
   });
   const SC = new Map(scored.map(x=>[x.c.id, x.score]));
-  const keep = [...best.values()].slice(0, top);
+  let keep = [...best.values()].slice(0, top);
   keep.forEach(x=>{ x.scoreOf = y => SC.has(y.id) ? SC.get(y.id) : null; });
+  // оценки ИИ, уже полученные для этих критериев, — сразу на карточки; с ними сортируем по ИИ
+  const AR = aiRequirements(crit), AK = aiKey(crit, AR);
+  keep.forEach(x=>{ if(x.c.ai && x.c.ai.key===AK && x.c.ai.res) x.ai = aiScore(x.c.ai.res, aiRequirements(crit), crit, x.c.raw); });
+  if(keep.some(x=>x.ai) && SORT_RES==='score') keep.sort((a,b)=>(b.ai?b.ai.score:-1)-(a.ai?a.ai.score:-1) || b.score-a.score);
   const out = scored.filter(s=>s.out).length;
   const below = hasCrit ? scored.filter(s=>!s.out && s.score < MIN_SCORE).length : 0;
   LAST_SHORT = keep;
@@ -2804,6 +2838,7 @@ function runMatch(){
          <option value="exp"${SORT_RES==='exp'?' selected':''}>${esc(T('sortBy'))}: ${esc(T('sortExp'))}</option>
          <option value="new"${SORT_RES==='new'?' selected':''}>${esc(T('sortBy'))}: ${esc(T('sortNew'))}</option>
        </select>
+       <button class="btn btn-primary btn-sm" id="aiBtn" onclick="aiRunShort()" title="ИИ прочитает резюме первых ${AI_TOP} кандидатов по вашим критериям">🤖 Оценить ИИ (первые ${Math.min(AI_TOP, keep.length)})</button>
        <button class="btn btn-ghost btn-sm" onclick="window.print()">${esc(T('printL'))}</button>
        <button class="btn btn-line btn-sm" onclick="saveToPosition()">${esc(T('savePos'))}</button>
        <button class="btn btn-line btn-sm" onclick="saveFav()">${esc(T('favSave'))}</button>
@@ -2813,18 +2848,155 @@ function runMatch(){
    ${keep.map((s,i)=>candCard(s,i)).join('') || `<div class="panel"><div class="empty"><div class="big">${esc(T('nothing'))}</div><div>${esc(T('nothingSub'))}</div></div></div>`}`;
   document.querySelectorAll('#matchOut .dial').forEach(drawDial);
 }
+/* ===== Оценка ИИ =====
+   Требования собирает платформа из критериев поиска, ИИ отвечает по каждому yes/partial/no/unknown
+   с цитатой из резюме, процент считает платформа (веса W, потолки за обязательные требования).
+   Цитата проверяется по тексту резюме: не нашлась — ответ не засчитывается. */
+let AI_ON = null;
+async function aiStatus(){
+  if(AI_ON!==null) return AI_ON;
+  if(!(await srvApi())){ AI_ON = false; return false; }
+  try{ const j = await (await fetch('api.php?a=ai_status',{credentials:'same-origin',cache:'no-store'})).json(); AI_ON = !!(j && j.enabled); }
+  catch(e){ AI_ON = false; }
+  return AI_ON;
+}
+function aiRequirements(crit){
+  const R = [], add = (criterion, importance, text) => R.push({id:'r'+(R.length+1), criterion, importance, text});
+  if(crit.pos) add('pos','must','Работал(а) в должности «'+crit.pos+'» или выполнял(а) на работе такие же обязанности (не по образованию и не по названию компании)');
+  // обязанности — только из поля «Обязанности по вакансии»; текст запроса уходит ИИ отдельно, как описание вакансии
+  (String((window.cDuties && cDuties.value) || '').split(/[;\n]|,(?![^(]*\))/).map(x=>x.trim()).filter(x=>x.length>3).slice(0,8))
+    .forEach(d=>add('pos','nice','Выполнял(а) на работе: '+d));
+  if(crit.exp>0) add('exp','must','Не менее '+crit.exp+' лет опыта работы по профилю вакансии'+(crit.pos?' «'+crit.pos+'»':''));
+  (crit.ind||[]).forEach(i=>add('exp','nice','Работал(а) по профилю вакансии в отрасли: '+i));
+  (crit.must||[]).forEach(k=>add('skills','must','Навык/инструмент: '+k));
+  (crit.nice||[]).forEach(k=>add('skills','nice','Навык/инструмент: '+k));
+  if(crit.edu>0) add('edu','nice','Образование не ниже: '+EDU_NAME[crit.edu].ru);
+  (crit.cert||[]).forEach(k=>add('edu','nice','Сертификат/лицензия: '+k));
+  if(crit.lang) add('extra','must','Владеет языком: '+crit.lang);
+  if(crit.city) add('extra','nice','Живёт в городе '+crit.city+(crit.reloc?' или готов(а) к переезду':''));
+  if(crit.manage) add('extra','must','Опыт управления командой (подчинённые)');
+  if(crit.format) add('extra','nice','Формат работы: '+({office:'офис',remote:'удалённо',hybrid:'гибрид'}[crit.format]||crit.format));
+  (crit.extra||[]).forEach(k=>add('extra','nice',k));
+  return R;
+}
+const aiKey = (crit, R) => JSON.stringify([crit.pos||'', R.map(r=>r.importance+r.text), crit.exp||0, String((window.qFree&&qFree.value)||'').slice(0,4000)]);
+function anonymize(c){
+  let t = String(c.raw||'');
+  nameInfo(c).t.length && String(dispName(c)).split(/\s+/).filter(w=>w.length>=3).forEach(w=>{ t = t.split(w).join('[Кандидат]'); });
+  return t.replace(/[\w.+-]+@[\w-]+\.[\w.]+/g,'[email]')
+          .replace(/(\+?\d[\d\s()\-]{7,}\d)/g,'[телефон]')
+          .replace(/^.*(адрес|address|суроға|дата\s+рожд|год\s+рожд|таърихи\s+таваллуд|семейн|паспорт).*$/gim,'')
+          .replace(/\n{3,}/g,'\n\n').slice(0,24000);
+}
+function evidenceOk(ev, raw){
+  const words = norm(ev||'').split(/[^a-zа-я0-9]+/).filter(w=>w.length>=4);
+  if(!words.length) return false;
+  const hay = norm(raw||''); return words.filter(w=>hay.includes(w.slice(0,6))).length / words.length >= 0.6;
+}
+const AI_PT = {yes:1, partial:0.5, no:0, unknown:0.3};
+const LEVELS = ['junior','middle','senior','lead','head','top'];
+function aiScore(res, R, crit, raw){
+  const st = {}, notes = [];
+  (res.requirements||[]).forEach(x=>{ st[x.id] = x; });
+  R.forEach(r=>{
+    const a = st[r.id] || {status:'unknown', evidence:''};
+    r.status = a.status; r.evidence = a.evidence||''; r.comment = a.comment||'';
+    if((r.status==='yes'||r.status==='partial') && !evidenceOk(r.evidence, raw)){ r.status='unknown'; r.unverified = true; }
+  });
+  // релевантные годы — по периодам, пересечения не суммируем
+  const ym = v => { if(!v) return null; if(/present|наст/i.test(v)) return new Date().getFullYear()*12+new Date().getMonth(); const m = String(v).match(/(\d{4})(?:-(\d{1,2}))?/); return m ? (+m[1])*12+((+m[2]||1)-1) : null; };
+  const iv = (res.periods||[]).filter(p=>p.relevant!=='no').map(p=>[ym(p.from), ym(p.to), p.relevant==='yes'?1:0.5]).filter(x=>x[0]!=null&&x[1]!=null&&x[1]>=x[0]).sort((a,b)=>a[0]-b[0]);
+  let months = 0, end = -1;
+  iv.forEach(([a,b,w])=>{ const s0 = Math.max(a, end+1); if(b>=s0) months += (b-s0+1)*w; end = Math.max(end,b); });
+  const years = Math.round(months/12*10)/10;
+  const rows = [];
+  ['pos','exp','skills','edu','extra'].forEach(k=>{
+    const rs = R.filter(r=>r.criterion===k);
+    let ratio = null;
+    if(k==='exp' && crit.exp>0){
+      const yr = Math.min(1, years/crit.exp), ind = rs.filter(r=>r.importance==='nice');
+      const indR = ind.length ? ind.reduce((a,r)=>a+AI_PT[r.status],0)/ind.length : null;
+      ratio = indR===null ? yr : 0.75*yr + 0.25*indR;
+      const req = rs.find(r=>r.importance==='must'); if(req){ req.status = years>=crit.exp ? 'yes' : years>=crit.exp*0.5 ? 'partial' : (iv.length?'no':req.status); req.evidence = req.evidence || ('по датам работы — '+years+' г. по профилю'); }
+    } else if(rs.length){
+      let sw=0, sp=0; rs.forEach(r=>{ const w = r.importance==='must'?2:1; sw+=w; sp+=w*AI_PT[r.status]; }); ratio = sp/sw;
+    }
+    if(ratio!==null) rows.push({key:k, label:T(W_LABEL[k]), weight:W[k], ratio});
+  });
+  const maxW = rows.reduce((a,r)=>a+r.weight,0);
+  let score = maxW ? Math.round(rows.reduce((a,r)=>a+r.weight*r.ratio,0)/maxW*100) : 0;
+  const mustNo = R.some(r=>r.importance==='must' && r.status==='no'), mustUnk = R.some(r=>r.importance==='must' && r.status==='unknown');
+  if(mustNo){ score = Math.min(score, 60); notes.push('не выполнено обязательное требование — не выше 60%'); }
+  else if(mustUnk){ score = Math.min(score, 80); notes.push('по обязательному требованию в резюме нет данных — не выше 80%'); }
+  const need = crit.manage ? 'lead' : crit.exp>5 ? 'senior' : crit.exp>=2 ? 'middle' : crit.exp>0 ? 'junior' : null;
+  const lvl = res.candidate_level, cmpL = need && lvl ? Math.sign(LEVELS.indexOf(lvl)-LEVELS.indexOf(need)) : 0;
+  return {score, rows, reqs:R, years, level:lvl, levelCmp:cmpL, need, mustNo, mustUnk, notes,
+    summary:res.summary||'', strengths:res.strengths||[], gaps:res.gaps||[],
+    band: score>=85?'Высокое соответствие':score>=70?'Хорошее':score>=50?'Частичное':'Слабое'};
+}
+async function aiAssess(c, crit){
+  const R = aiRequirements(crit), key = aiKey(crit, R);
+  if(c.ai && c.ai.key===key && c.ai.res) return aiScore(c.ai.res, R, crit, c.raw);
+  if(!SRV_SESSID) await srvApi();
+  const r = await fetch('api.php?a=ai', {method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({sessid:SRV_SESSID, position:crit.pos||'', description:String((window.qFree&&qFree.value)||'').slice(0,4000), requirements:R.map(({id,criterion,importance,text})=>({id,criterion,importance,text})), resume:anonymize(c)})});
+  const j = await r.json().catch(()=>({ok:false,error:'HTTP '+r.status}));
+  if(!j.ok) throw new Error(j.error||('HTTP '+r.status));
+  c.ai = {key, at:Date.now(), model:j.model||null, res:j.result};
+  await dbPut([c]);
+  return aiScore(j.result, aiRequirements(crit), crit, c.raw);
+}
+let AI_RUNNING = false;
+async function aiRunShort(){
+  if(AI_RUNNING) return;
+  if(!(await aiStatus())){
+    toast(location.hostname==='isosaid.github.io' ? 'Оценка ИИ работает внутри Битрикс24' : 'ИИ не подключён: положите ai_config.php с ключом рядом с api.php'); return;
+  }
+  const crit = LAST_CRIT; if(!crit || !LAST_SHORT.length) return;
+  const list = LAST_SHORT.filter(s=>!s.c.meta && (s.c.raw||'').length>100).slice(0, AI_TOP);
+  AI_RUNNING = true; let done=0, fail=0; const btn = document.getElementById('aiBtn');
+  const say = () => { if(btn) btn.textContent = '🤖 ИИ оценивает… '+done+' из '+list.length; };
+  say();
+  const queue = list.slice(); const errs = [];
+  await Promise.all([0,1,2].map(async ()=>{ while(queue.length){ const s1 = queue.shift();
+    try{ s1.ai = await aiAssess(s1.c, crit); }catch(e){ fail++; errs.push(e.message); } done++; say(); } }));
+  AI_RUNNING = false;
+  runMatch();
+  toast('ИИ оценил: '+(done-fail)+(fail?' · ошибок: '+fail+' ('+errs[0]+')':''));
+}
+const AI_TOP = 10;
+function aiBlock(s){
+  const a = s.ai; if(!a) return '';
+  const cls = a.score>=85?'ok':a.score>=70?'ok':a.score>=50?'warn':'bad';
+  const lvl = a.level ? `<span class="pill">${esc(a.level)}</span>` + (a.levelCmp<0?` <span class="pill warn">ниже требуемого уровня</span>`:a.levelCmp>0?` <span class="pill warn">выше требуемого уровня</span>`:'') : '';
+  return `<div class="ai-box"><div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
+      <span class="pill ${cls}" style="font-weight:600">🤖 ИИ: ${a.score}% · ${esc(a.band)}</span>${lvl}
+      <span class="hint">опыт по профилю: ${a.years} г.</span>${a.mustUnk&&!a.mustNo?' <span class="pill warn">не указано в резюме</span>':''}</div>
+    ${a.summary?`<div style="margin-top:6px">${esc(a.summary)}</div>`:''}</div>`;
+}
+function aiReqRows(a){
+  const ic = {yes:'✓',partial:'◐',no:'✕',unknown:'?'}, col = {yes:'var(--accent)',partial:'var(--warn)',no:'var(--danger)',unknown:'var(--muted)'};
+  return `<div style="margin-top:10px"><b style="font-size:13px">Как ИИ оценил требования</b>${a.reqs.map(r=>`<div style="display:flex;gap:8px;margin-top:6px;font-size:12.5px">
+      <span style="color:${col[r.status]};font-weight:700;width:14px">${ic[r.status]}</span>
+      <div><div>${esc(r.text)}${r.importance==='must'?' <span class="hint">(обязательно)</span>':''}</div>
+      ${r.evidence?`<div class="hint" style="font-style:italic">«${esc(r.evidence)}»</div>`:''}${r.unverified?'<div class="hint" style="color:var(--warn)">цитата не найдена в резюме — не засчитано</div>':''}</div></div>`).join('')}
+    ${a.notes.map(n=>`<div class="hint" style="margin-top:6px">${esc(n)}</div>`).join('')}</div>`;
+}
+
 const ICON_OK = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8.5 6.2 12 13 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const ICON_WN = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6.3" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v4.2M8 11.3v.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`;
 function candCard(s,i){
-  const c = s.c, cls = s.score>=85?'accent':(s.score>=65?'warn':'danger');
+  const c = s.c, shown = s.ai ? s.ai.score : s.score, cls = shown>=85?'accent':(shown>=65?'warn':'danger');
   const role = [posOf(c), c.exp!=null?c.exp+' '+T('yrs'):null, c.city, c.edu?EDU_NAME[c.edu][LANG]:null].filter(Boolean).join(' · ');
   const jid = jsArg(c.id);
   return `<div class="cand-card">
    <div class="cand-top">
-     <div class="dial" data-pct="${s.score}" data-color="${cls}" onclick="openD(${jid})" style="cursor:pointer" title="Открыть карточку кандидата"></div>
+     <div style="text-align:center"><div class="dial" data-pct="${shown}" data-color="${cls}" onclick="openD(${jid})" style="cursor:pointer" title="${s.ai?'Оценка ИИ':'Быстрая оценка по ключевым словам'}"></div>
+       <div class="hint" style="font-size:10.5px;margin-top:3px">${s.ai?'ИИ · быстрая '+s.score+'%':'быстрая'}</div></div>
      <div class="cand-main">
        <a href="#" class="cand-name" onclick="openD(${jid});return false" title="Открыть карточку кандидата">${esc(dispName(c))}</a>
        <div class="cand-role" onclick="openD(${jid})" style="cursor:pointer">${esc(role)}</div>
+       ${aiBlock(s)}
        ${appsHtml(c, s.scoreOf)}
        <div class="cand-tags">${(c.skills||[]).slice(0,6).map(k=>`<span class="pill">${esc(k)}</span>`).join('')}</div>
        <div class="cand-checks">
@@ -2838,13 +3010,15 @@ function candCard(s,i){
          <button class="why-toggle" aria-expanded="false" onclick="toggleWhy(${i},this)">${esc(T('why'))}</button>
        </div>
        <div class="why-panel" id="why${i}" hidden>
-         ${s.rows.map(r=>`<div class="why-row">
+         ${s.ai?'<div class="hint" style="margin-bottom:6px">Оценка ИИ по критериям (веса из настроек):</div>':''}
+         ${(s.ai ? s.ai.rows : s.rows).map(r=>`<div class="why-row">
             <span>${esc(r.label)}</span>
             <div class="why-bar"><span class="${r.ratio<0.5?'w':''}" style="width:${Math.round(r.ratio*100)}%"></span></div>
             <span class="num">${Math.round(r.ratio*100)}%</span>
             <span class="wt">×${r.weight}</span>
           </div>`).join('')}
          <p class="hint" style="margin-top:8px">${esc(T('wNote'))}</p>
+         ${s.ai ? aiReqRows(s.ai) : ''}
        </div>
      </div>
    </div></div>`;
